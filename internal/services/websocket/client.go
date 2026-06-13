@@ -3,12 +3,15 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"time"
 
 	"github.com/AliKefall/Somnambulist/internal/services/observability"
 	"github.com/gorilla/websocket"
 )
+
+var errSendBufferFull = errors.New("Websocket send buffer is full")
 
 const (
 	maxMessageSize = 16 * 1024
@@ -72,15 +75,18 @@ func (c *Client) sendRaw(payload []byte) error {
 
 func (c *Client) Close() {
 	c.cancel()
-	close(c.Send)
 	_ = c.Conn.Close()
 }
 
 func (c *Client) ReadPump() {
 	defer func() {
-		c.Hub.Unregister <- c
+		if c.Hub != nil {
+			c.Hub.Unregister <- c
+		}
 		c.Close()
-		c.Metrics.DecWSConnections()
+		if c.Metrics != nil {
+			c.Metrics.DecWSConnections()
+		}
 	}()
 
 	c.Conn.SetReadLimit(maxMessageSize)
@@ -95,14 +101,14 @@ func (c *Client) ReadPump() {
 			return
 		}
 
-		var msg Message
+		var msg Envelope
 		if err := c.Conn.ReadJSON(&msg); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseAbnormalClosure, websocket.CloseGoingAway) {
-				log.Print("WS read error user=%s err=%v")
+				log.Printf("WS read error user=%s err=%v", c.Username, err)
 			}
 			return
 		}
-		c.Metrics.ObserveWSMessage("in", string(msg.Type))
+		c.Metrics.ObserveWSMessage("in", msg.Type)
 		c.Hub.HandleMessage(c, msg)
 	}
 
@@ -137,6 +143,14 @@ func (c *Client) WritePump() {
 			}
 		}
 	}
+}
+
+func (c *Client) SendError(code, message string) {
+	env, err := NewEnvelope(MessageTypeError, nil, &EnvelopeUser{ID: c.UserID, Username: c.Username}, ErrorPayload{Code: code, Message: message})
+	if err != nil {
+		return
+	}
+	_ = c.writeJSON(env)
 }
 
 func (c *Client) writeBatch(first []byte) error {

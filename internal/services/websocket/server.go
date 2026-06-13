@@ -20,6 +20,8 @@ func init() {
 		origin = strings.TrimSpace(origin)
 		if origin != "" {
 			allowedOrigins[origin] = struct{}{}
+			// A little information in golang struct{}{} is actually 0 byte
+			// That is why its been used in here.
 		}
 	}
 }

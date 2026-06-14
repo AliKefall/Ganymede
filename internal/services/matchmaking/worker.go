@@ -51,7 +51,7 @@ func (w *Worker) Run(ctx context.Context) error {
 							log.Printf("Matchmaking match handler failed match_id=%s err=%v", match.ID, err)
 						}
 					}
-					w.notifyMatch(match)
+					//Notify matches
 				}
 			}
 		}
@@ -170,7 +170,6 @@ func (s *Service) FindMatches(
 	return matches, nil
 }
 
-
 func (w *Worker) timeControls() []string {
 	if len(w.TimeControls) == 0 {
 		return []string{"rapid"}
@@ -185,36 +184,3 @@ func (w *Worker) batchSize() int {
 	return w.BatchSize
 }
 
-func (w *Worker) notifyMatch(match Match) {
-	if w.Hub == nil {
-		return
-	}
-
-	payload := websocket.MatchFoundPayload{
-		MatchID: match.ID.String(),
-
-		WhiteID: match.WhiteID.String(),
-		BlackID: match.BlackID.String(),
-
-		TimeControl: match.TimeControl,
-	}
-
-	env, err := websocket.NewEnvelope(
-		websocket.MessageTypeMatchFound,
-		nil,
-		nil,
-		payload,
-	)
-
-	if err != nil {
-		return
-	}
-
-	w.Hub.BroadcastToUsers(
-		[]string{
-			match.WhiteID.String(),
-			match.BlackID.String(),
-		},
-		env,
-	)
-}

@@ -49,23 +49,7 @@ type DirectMessagePayload struct {
 	Content        string `json:"content"`
 }
 
-type GameMovePayload struct {
-	MatchID     string `json:"match_id"`
-	MoveNumber  int    `json:"move_number"`
-	PlayerID    string `json:"player_id"`
-	SAN         string `json:"san"`
-	UCI         string `json:"uci"`
-	FENAfter    string `json:"fen_after"`
-	WhiteTimeMS int64  `json:"white_time_ms"`
-	BlackTimeMS int64  `json:"black_time_ms"`
-}
 
-type MatchFoundPayload struct {
-	MatchID     string `json:"match_id"`
-	WhiteID     string `json:"white_id"`
-	BlackID     string `json:"black_id"`
-	TimeControl string `json:"time_control"`
-}
 
 type ErrorPayload struct {
 	Code    string `json:"code"`
@@ -222,12 +206,6 @@ func (h *Hub) SendDirectEnvelope(receiverID string, env Envelope) error {
 	h.Metrics.ObserveWSMessage("out", env.Type)
 
 	return nil
-}
-
-func (h *Hub) BroadcastToUsers(userIDs []string, env Envelope) {
-	for _, userID := range userIDs {
-		_ = h.SendDirectEnvelope(userID, env)
-	}
 }
 
 func (h *Hub) ActiveConnections() int64 {

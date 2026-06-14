@@ -14,9 +14,24 @@ import (
 
 func main() {
 	godotenv.Load()
+	config := NewServer()
+	conn, deps := bootstrapServer(config)
+	defer conn.Close()
 
+	go deps.hub.Run()
 
-	go waitForShutdown()
+	router := buildRouter(config, deps)
+	srv := http.Server{
+		Addr:    ":" + config.Port,
+		Handler: router,
+	}
+
+	log.Printf("Server listening on: %s", config.Port)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("Server failed: %v", err)
+	}
+
+	go waitForShutdown(&srv)
 
 }
 

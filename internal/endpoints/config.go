@@ -5,6 +5,7 @@ import (
 
 	"github.com/AliKefall/Somnambulist/internal/auth"
 	"github.com/AliKefall/Somnambulist/internal/database"
+	ratelimite "github.com/AliKefall/Somnambulist/internal/services/ratelimiter"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -14,4 +15,15 @@ type Config struct {
 	JWT     *auth.JWTManager
 	Hasher  *auth.PasswordHasher
 	Redis   *redis.Client
+	RateLimiter ratelimite.RateLimiter
+}
+
+func NewConfig(dbconn *sql.DB, queries *database.Queries, jwt *auth.JWTManager, hasher *auth.PasswordHasher, redisClient *redis.Client) *Config {
+	return &Config{
+		DB:      dbconn,
+		Queries: queries,
+		JWT:     jwt,
+		Hasher:  hasher,
+		Redis:   redisClient,
+	}
 }

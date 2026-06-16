@@ -47,7 +47,7 @@ func buildRouter(config *ServerConfig, deps serverDependencies) chi.Router {
 
 	rateLimiter, err := ratelimiter.NewRedisTokenBucketLimiter(deps.redis, 20, 10)
 	if err != nil {
-		log.Fatal("Ratelimiter init failed: %v", err)
+		log.Fatalf("Ratelimiter init failed: %v", err)
 	}
 	r.Use(ratelimiter.MiddlewareRateLimiter(rateLimiter))
 
@@ -76,7 +76,7 @@ func buildRouter(config *ServerConfig, deps serverDependencies) chi.Router {
 	return r
 }
 
-func securityHeaderMiddleware(next http.Handler) http.Handler{
+func securityHeaderMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		headers := w.Header()
 		headers.Set("X-Content-Type-Options", "nosniff")

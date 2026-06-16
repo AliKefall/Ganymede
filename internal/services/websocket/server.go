@@ -50,7 +50,7 @@ func ServeWS(
 	username string,
 	onConnected func(*Client),
 ) {
-	if hub != nil && hub.ActiveConnections() > 20000 {
+	if hub != nil && hub.ActiveConnection() > 20000 {
 		http.Error(w, "Server is busy", http.StatusServiceUnavailable)
 		return
 	}
@@ -72,7 +72,7 @@ func ServeWS(
 	client := NewClient(ctx, conn, hub, metrics, userID, username)
 
 	select {
-	case hub.Register <- client:
+	case hub.register <- client:
 	case <-time.After(3 * time.Second):
 		log.Printf("ws register timeout user=%s", username)
 		conn.Close()

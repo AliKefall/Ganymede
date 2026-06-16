@@ -81,7 +81,7 @@ func (c *Client) Close() {
 func (c *Client) ReadPump() {
 	defer func() {
 		if c.Hub != nil {
-			c.Hub.Unregister <- c
+			c.Hub.unregister <- c
 		}
 		c.Close()
 		if c.Metrics != nil {
@@ -101,7 +101,7 @@ func (c *Client) ReadPump() {
 			return
 		}
 
-		var msg Envelope
+		var msg Message
 		if err := c.Conn.ReadJSON(&msg); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseAbnormalClosure, websocket.CloseGoingAway) {
 				log.Printf("WS read error user=%s err=%v", c.Username, err)
@@ -145,12 +145,12 @@ func (c *Client) WritePump() {
 	}
 }
 
-func (c *Client) SendError(code, message string) {
-	env, err := NewEnvelope(MessageTypeError, nil, &EnvelopeUser{ID: c.UserID, Username: c.Username}, ErrorPayload{Code: code, Message: message})
+func (c *Client) sendError(code, message string) {
+	msg, err := newMessage(TypeError, ErrorPayload{Code: code, Message: message})
 	if err != nil {
 		return
 	}
-	_ = c.writeJSON(env)
+	_ = c.writeJSON(msg)
 }
 
 func (c *Client) writeBatch(first []byte) error {

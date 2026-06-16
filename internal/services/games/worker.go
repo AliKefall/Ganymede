@@ -1,6 +1,5 @@
 package games
 
-
-func NotifyMove(move GameMovePayload) {
+func NotifyMatchFound(){
 
 }

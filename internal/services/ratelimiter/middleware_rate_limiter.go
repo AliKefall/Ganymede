@@ -8,13 +8,13 @@ import (
 	"time"
 )
 
-type RateLimiter interface{
-	Allow(key string, now time.Time)(bool, error)
+type RateLimiter interface {
+	Allow(key string, now time.Time) (bool, error)
 }
 
-func ClientIP(r *http.Request) string{
-	if forwardedFor := r.Header.Get("X-Forwarded-For"); forwardedFor != ""{
-		for candidate := range strings.SplitSeq(forwardedFor, ","){
+func ClientIP(r *http.Request) string {
+	if forwardedFor := r.Header.Get("X-Forwarded-For"); forwardedFor != "" {
+		for candidate := range strings.SplitSeq(forwardedFor, ",") {
 			ip := strings.TrimSpace(candidate)
 			if parsed := net.ParseIP(ip); parsed != nil {
 				return parsed.String()
@@ -25,10 +25,11 @@ func ClientIP(r *http.Request) string{
 	if err == nil {
 		return host
 	}
+
 	return r.RemoteAddr
 }
 
-func MiddlewareRateLimiter(limiter RateLimiter) func(http.Handler) http.Handler{
+func MiddlewareRateLimiter(limiter RateLimiter) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			key := ClientIP(r) + ":" + r.URL.Path

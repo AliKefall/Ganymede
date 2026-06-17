@@ -19,7 +19,7 @@ const (
 
 	//Outbound
 	TypeNewMessage = "new_message"
-	TypeError = "error"
+	TypeError      = "error"
 )
 
 var (
@@ -31,7 +31,7 @@ type Message struct {
 	ID        string          `json:"id,omitempty"`
 	Type      string          `json:"type"`
 	Payload   json.RawMessage `json:"payload"`
-	CreatedAt time.Time       `json:"created_at,omitempty"`
+	CreatedAt time.Time       `json:"created_at"`
 }
 
 type SendMessagePayload struct {
@@ -78,6 +78,7 @@ func NewHub(queries *database.Queries, metrics *observability.Metrics) *Hub {
 		metrics:    metrics,
 		register:   make(chan *Client, 256),
 		unregister: make(chan *Client, 256),
+		inbound:  make(chan inbound, 1024),
 	}
 }
 
@@ -98,6 +99,8 @@ func (h *Hub) Run(ctx context.Context) {
 			h.registerClient(c)
 		case c := <-h.unregister:
 			h.unregisterClient(c)
+		case in := <-h.inbound:
+			h.dispatch(in.sender, in.msg)
 		}
 	}
 }

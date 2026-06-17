@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/AliKefall/Somnambulist/internal/endpoints"
 	"github.com/AliKefall/Somnambulist/internal/services/observability"
 	"github.com/AliKefall/Somnambulist/internal/services/websocket"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -35,7 +37,7 @@ func bootstrapServer(config *ServerConfig) (*sql.DB, serverDependencies) {
 		queries: queries,
 		hub:     hub,
 		metrics: metrics,
-		redis: redisClient,
+		redis:   redisClient,
 	}
 }
 
@@ -56,19 +58,34 @@ func mustOpenDatabase(config *ServerConfig) *sql.DB {
 }
 
 func NewRedisClient(redisURL string) *redis.Client {
+
+	var opt *redis.Options
+	var err error
+
 	if redisURL != "" {
-		opt, err := redis.ParseURL(redisURL)
+		opt, err = redis.ParseURL(redisURL)
 		if err != nil {
-			return redis.NewClient(opt)
-		} else {
-			log.Fatalf("Error creating redis client: %v", err)
+			log.Fatalf("invalid REDIS_URL: %v", err)
+		}
+	} else {
+		opt = &redis.Options{
+			Addr:         "localhost:6379",
+			Password:     "",
+			DB:           0,
+			PoolSize:     10,
+			MaxIdleConns: 5,
 		}
 	}
-	return redis.NewClient(&redis.Options{
-		Addr:         "localhost:6379",
-		Password:     "",
-		DB:           0,
-		PoolSize:     10,
-		MaxIdleConns: 5,
-	})
+
+	rdb := redis.NewClient(opt)
+
+	// optional but recommended: early fail
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		log.Fatalf("redis connection failed: %v", err)
+	}
+
+	return rdb
 }

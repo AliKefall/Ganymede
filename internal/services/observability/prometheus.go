@@ -66,7 +66,7 @@ func New() *Metrics{
 				prometheus.CounterOpts{
 					Namespace: "Ganymede",
 					Subsystem: "ws",
-					Name: "connections_active",
+					Name: "connections_total",
 					Help: "Total WebSocket connections by result",
 
 				},

@@ -18,7 +18,7 @@ func main() {
 	conn, deps := bootstrapServer(config)
 	defer conn.Close()
 
-	go deps.hub.Run()
+	go deps.hub.Run(context.Background())
 
 	router := buildRouter(config, deps)
 	srv := http.Server{

@@ -81,7 +81,7 @@ func (cfg *Config) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// SESSION VALIDATIO
+		// SESSION VALIDATION
 		sessionUUID, err := uuid.Parse(claims.SessionID)
 		if err != nil {
 			RespondWithError(

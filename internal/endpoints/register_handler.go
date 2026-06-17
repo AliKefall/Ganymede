@@ -57,7 +57,7 @@ func (cfg *Config) HandlerRegister(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
-			if pgErr.Code == "23505" { // Unique constraint violation
+			if pgErr.Code == "23505" { // 23505 = Unique constraint violation
 				switch pgErr.ConstraintName {
 				case "users_email_key":
 					RespondWithError(w, http.StatusConflict, "conflict_error", "Email already in use", "", nil)

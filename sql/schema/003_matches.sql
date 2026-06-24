@@ -40,7 +40,7 @@ CREATE TABLE match_moves(
     id BIGSERIAL PRIMARY KEY,
     match_id UUID NOT NULL,
 
-    move_number UUID NOT NULL,
+    move_number INT NOT NULL,
     player_id UUID NOT NULL,
 
     san TEXT NOT NULL,

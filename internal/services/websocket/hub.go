@@ -18,8 +18,9 @@ const (
 	TypeSendMessage = "send_message"
 
 	//Outbound
-	TypeNewMessage = "new_message"
-	TypeError      = "error"
+	TypeNewMessage    = "new_message"
+	TypeError         = "error"
+
 )
 
 var (
@@ -59,15 +60,16 @@ type NewMessagePayload struct {
 
 // atomic alignment for 32 bit system. Active always must come first
 type Hub struct {
-	active     int64
-	mu         sync.RWMutex
-	clients    map[*Client]bool
-	users      map[string]map[*Client]bool
-	queries    *database.Queries
-	metrics    *observability.Metrics
-	register   chan *Client
-	unregister chan *Client
-	inbound    chan inbound
+	active             int64
+	mu                 sync.RWMutex
+	clients            map[*Client]bool
+	users              map[string]map[*Client]bool
+	queries            *database.Queries
+	metrics            *observability.Metrics
+	register           chan *Client
+	unregister         chan *Client
+
+	inbound            chan inbound
 }
 
 func NewHub(queries *database.Queries, metrics *observability.Metrics) *Hub {
@@ -78,7 +80,7 @@ func NewHub(queries *database.Queries, metrics *observability.Metrics) *Hub {
 		metrics:    metrics,
 		register:   make(chan *Client, 256),
 		unregister: make(chan *Client, 256),
-		inbound:  make(chan inbound, 1024),
+		inbound:    make(chan inbound, 1024),
 	}
 }
 

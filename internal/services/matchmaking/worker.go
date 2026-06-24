@@ -183,4 +183,3 @@ func (w *Worker) batchSize() int {
 	}
 	return w.BatchSize
 }
-

@@ -24,12 +24,12 @@ func (cfg *Config) HandlerLogin(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	var req RegisterRequest
+	var req LoginRequest
 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
-	if err := decoder.Decode(r.Body); err != nil {
+	if err := decoder.Decode(&req); err != nil {
 		RespondWithError(w, http.StatusBadRequest, "login_error", "Invalid request body", "", err)
 		return
 	}
@@ -41,7 +41,7 @@ func (cfg *Config) HandlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := cfg.Queries.GetUserByEmail(r.Context(), req.Email)
+	user, err := cfg.Queries.GetUserByEmail(ctx, req.Email)
 	if err != nil {
 		RespondWithError(w, http.StatusUnauthorized, "login_error", "Invalid credentials", "", err)
 		return
@@ -65,7 +65,7 @@ func (cfg *Config) HandlerLogin(w http.ResponseWriter, r *http.Request) {
 	refreshToken, err := auth.MakeRefreshToken()
 
 	if err != nil {
-		RespondWithError(w, http.StatusInternalServerError, "refresh_error", "Failed to create refresh token", "",err)
+		RespondWithError(w, http.StatusInternalServerError, "refresh_error", "Failed to create refresh token", "", err)
 		return
 	}
 

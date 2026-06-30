@@ -19,6 +19,7 @@ const (
 	DefaultWindowGrowth   = 25
 	DefaultMaxWindow      = 500
 	DefaultMatchBatchSize = 25
+	DefaultRating = 1500
 )
 
 var (

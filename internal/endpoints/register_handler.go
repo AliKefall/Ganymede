@@ -33,8 +33,9 @@ func (cfg *Config) HandlerRegister(w http.ResponseWriter, r *http.Request) {
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	req.Username = strings.TrimSpace(req.Username)
 
-	if isValidEmail(req.Email) || isValidUsername(req.Username) || isValidPassword(req.Password) {
-		RespondWithError(w, http.StatusBadRequest, "unfit_register_parameters", "Invalid parameters", "", nil)
+	err := ValidateRegister(req.Email, req.Username, req.Password)
+	if err != nil {
+		RespondWithError(w, http.StatusBadRequest, "validation_error", "Broken parameters for register", "", err)
 		return
 	}
 
@@ -50,8 +51,8 @@ func (cfg *Config) HandlerRegister(w http.ResponseWriter, r *http.Request) {
 		Username:  req.Username,
 		Email:     req.Email,
 		Password:  hashed,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	})
 
 	if err != nil {
@@ -62,7 +63,7 @@ func (cfg *Config) HandlerRegister(w http.ResponseWriter, r *http.Request) {
 				case "users_email_key":
 					RespondWithError(w, http.StatusConflict, "conflict_error", "Email already in use", "", nil)
 					return
-				case "users_usename_key":
+				case "users_username_key":
 					RespondWithError(w, http.StatusConflict, "conflict_error", "Username already in use", "", nil)
 					return
 				default:

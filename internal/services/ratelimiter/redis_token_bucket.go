@@ -1,8 +1,10 @@
+
 package ratelimiter
 
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -12,38 +14,52 @@ import (
 var tokenBucketLua string
 
 type RedisTokenBucketLimiter struct {
-	client     *redis.Client
+	client     redis.UniversalClient
 	capacity   float64
 	refillRate float64
-	ctx        context.Context
+	ttl        time.Duration
 	luaScript  *redis.Script
 }
 
-func NewRedisTokenBucketLimiter(client *redis.Client, capacity int, refillPerSec float64) (*RedisTokenBucketLimiter, error) {
-	script := redis.NewScript(tokenBucketLua)
+
+func NewRedisTokenBucketLimiter(client redis.UniversalClient, capacity int, refillPerSec float64) (*RedisTokenBucketLimiter, error) {
+	if capacity <= 0 {
+		return nil, fmt.Errorf("ratelimiter: capacity must be positive, got %d", capacity)
+	}
+	if refillPerSec <= 0 {
+		return nil, fmt.Errorf("ratelimiter: refillPerSec must be positive, got %f", refillPerSec)
+	}
+
+	ttl := time.Duration(float64(capacity)/refillPerSec*2) * time.Second
+	if ttl < time.Minute {
+		ttl = time.Minute
+	}
 
 	return &RedisTokenBucketLimiter{
 		client:     client,
 		capacity:   float64(capacity),
 		refillRate: refillPerSec,
-		ctx:        context.Background(),
-		luaScript:  script,
+		ttl:        ttl,
+		luaScript:  redis.NewScript(tokenBucketLua),
 	}, nil
 }
 
-func (l *RedisTokenBucketLimiter) Allow(key string, now time.Time) (bool, error) {
-	redisKey := "rate_token" + key
+func (l *RedisTokenBucketLimiter) Allow(ctx context.Context, key string, now time.Time) (bool, error) {
+	redisKey := "rate_token:" + key
+
 	result, err := l.luaScript.Run(
-		l.ctx,
+		ctx,
 		l.client,
 		[]string{redisKey},
 		l.capacity,
-		now.Unix(),
-		1,
+		l.refillRate,
+		now.UnixMilli(),
+		int64(l.ttl.Seconds()),
 	).Int()
-
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("ratelimiter: script failed for key %q: %w", key, err)
 	}
+
 	return result == 1, nil
 }
+

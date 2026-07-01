@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
@@ -26,7 +27,7 @@ type PasswordHasher struct {
 
 func NewPasswordHasher() *PasswordHasher {
 	return &PasswordHasher{
-		memory:      64 * 1024, // Every iteration takes 64mb
+		memory:      64 * 1024,
 		time:        3,
 		parallelism: 2,
 		keyLen:      32,
@@ -52,51 +53,80 @@ func (p *PasswordHasher) Hash(password string) (string, error) {
 	b64Salt := base64.RawStdEncoding.EncodeToString(salt)
 	b64Hash := base64.RawStdEncoding.EncodeToString(hash)
 
-	encoded := fmt.Sprintf(
-		"%s$v=%d$m=%d,p=%d$%s$%s",
+	return fmt.Sprintf(
+		"%s$v=%d$m=%d,t=%d,p=%d$%s$%s",
 		algorithm,
 		version,
 		p.memory,
+		p.time,
 		p.parallelism,
 		b64Salt,
 		b64Hash,
-	)
-	return encoded, nil
+	), nil
 }
 
 func (p *PasswordHasher) Verify(password, encoded string) (bool, error) {
+
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 5 {
-		return false, errors.New("Invalid hash format")
+		return false, fmt.Errorf("invalid hash format: got %d parts", len(parts))
 	}
 
 	if parts[0] != algorithm {
-		return false, errors.New("Unsupported algorithm")
+		return false, errors.New("unsupported algorithm")
 	}
 
-	var parsedVersion int
-	_, err := fmt.Sscan(parts[1], "v=%d", &parsedVersion)
-	if err != nil || parsedVersion != version {
-		return false, errors.New("Incompatible version")
+	// version
+	if !strings.HasPrefix(parts[1], "v=") {
+		return false, errors.New("invalid version format")
 	}
 
-	var memory uint32
-	var time uint32
+	parsedVersion, err := strconv.Atoi(strings.TrimPrefix(parts[1], "v="))
+	if err != nil {
+		return false, err
+	}
+
+	if parsedVersion != version {
+		return false, errors.New("incompatible version")
+	}
+
+	// params (STRICT PARSE)
+	params := strings.Split(parts[2], ",")
+
+	var memory, time uint32
 	var parallelism uint8
 
-	_, err = fmt.Sscanf(parts[2], "m=%d,t=%d,p=%d", &memory, &time, &parallelism)
-	if err != nil {
-		return false, errors.New("Invalid password parameters")
+	for _, param := range params {
+		kv := strings.Split(param, "=")
+		if len(kv) != 2 {
+			return false, fmt.Errorf("invalid param segment: %s", param)
+		}
+
+		val, err := strconv.Atoi(kv[1])
+		if err != nil {
+			return false, err
+		}
+
+		switch kv[0] {
+		case "m":
+			memory = uint32(val)
+		case "t":
+			time = uint32(val)
+		case "p":
+			parallelism = uint8(val)
+		}
+	}
+
+	if memory == 0 || time == 0 || parallelism == 0 {
+		return false, errors.New("invalid parsed parameters")
 	}
 
 	salt, err := base64.RawStdEncoding.DecodeString(parts[3])
-
 	if err != nil {
 		return false, err
 	}
 
 	expectedHash, err := base64.RawStdEncoding.DecodeString(parts[4])
-
 	if err != nil {
 		return false, err
 	}
@@ -107,11 +137,12 @@ func (p *PasswordHasher) Verify(password, encoded string) (bool, error) {
 		time,
 		memory,
 		parallelism,
-		uint32(len(expectedHash)), // This needs to be dynamic value
+		p.keyLen,
 	)
 
 	if subtle.ConstantTimeCompare(hash, expectedHash) == 1 {
 		return true, nil
 	}
+
 	return false, nil
 }

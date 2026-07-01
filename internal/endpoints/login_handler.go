@@ -43,11 +43,11 @@ func (cfg *Config) HandlerLogin(w http.ResponseWriter, r *http.Request) {
 
 	user, err := cfg.Queries.GetUserByEmail(ctx, req.Email)
 	if err != nil {
-		RespondWithError(w, http.StatusUnauthorized, "login_error", "Invalid credentials", "", err)
+		RespondWithError(w, http.StatusUnauthorized, "login_error", "User could not be found", "", err)
 		return
 	}
 
-	ok, err := cfg.Hasher.Verify(user.Password, req.Password)
+	ok, err := cfg.Hasher.Verify(req.Password, user.Password)
 	if !ok || err != nil {
 		RespondWithError(w, http.StatusUnauthorized, "login_error", "Invalid credentials", "", err)
 		return

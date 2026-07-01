@@ -1,6 +1,7 @@
 package ratelimiter
 
 import (
+	"context"
 	"log"
 	"net"
 	"net/http"
@@ -8,8 +9,11 @@ import (
 	"time"
 )
 
+// RateLimiter is implemented by any backend capable of answering "is this
+// key allowed right now". ctx should be used to bound how long the
+// underlying call is allowed to take.
 type RateLimiter interface {
-	Allow(key string, now time.Time) (bool, error)
+	Allow(ctx context.Context, key string, now time.Time) (bool, error)
 }
 
 func ClientIP(r *http.Request) string {
@@ -25,18 +29,23 @@ func ClientIP(r *http.Request) string {
 	if err == nil {
 		return host
 	}
-
 	return r.RemoteAddr
 }
+
+
+const rateLimitTimeout = 200 * time.Millisecond
 
 func MiddlewareRateLimiter(limiter RateLimiter) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			key := ClientIP(r) + ":" + r.URL.Path
 
-			ok, err := limiter.Allow(key, time.Now())
+			ctx, cancel := context.WithTimeout(r.Context(), rateLimitTimeout)
+			defer cancel()
+
+			ok, err := limiter.Allow(ctx, key, time.Now())
 			if err != nil {
-				log.Printf("Rate limiter backend error for key = %q: %v", key, err)
+				log.Printf("rate limiter backend error for key=%q: %v", key, err)
 				h.ServeHTTP(w, r)
 				return
 			}
@@ -49,3 +58,4 @@ func MiddlewareRateLimiter(limiter RateLimiter) func(http.Handler) http.Handler 
 		})
 	}
 }
+

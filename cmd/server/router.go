@@ -67,6 +67,15 @@ func buildRouter(config *ServerConfig, deps serverDependencies) chi.Router {
 		websocket.ServeWS(deps.hub, deps.metrics, w, r, uid.String(), user.Username, nil)
 	})
 
+	r.Group(func(pr chi.Router) {
+		pr.Use(deps.config.AuthMiddleware)
+		pr.Get("/friends", deps.config.HandleListFriends)
+		pr.Get("/friends/requests", deps.config.HandleFriendRequests)
+		pr.Post("/friends/requests", deps.config.HandleSendFriendRequest)
+		pr.Post("/friends/requests/accept", deps.config.HandleAcceptFriendRequest)
+		pr.Post("/friends/requests/reject", deps.config.HandleRejectFriendRequest)
+	})
+
 	r.Route("/auth", func(ar chi.Router) {
 		ar.Post("/register", deps.config.HandlerRegister)
 		ar.Post("/login", deps.config.HandlerLogin)
@@ -85,6 +94,9 @@ func securityHeaderMiddleware(next http.Handler) http.Handler {
 		headers.Set("Cross-Origin-Resource-Policy", "same-site")
 		headers.Set("Cross-Origin-Opener-Policy", "same-origin")
 		headers.Set("Cross-Origin-Embedder-Policy", "credentialless")
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			headers.Set("Strict-Transport-Security", "max-age=31536000; includeSubdomains")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

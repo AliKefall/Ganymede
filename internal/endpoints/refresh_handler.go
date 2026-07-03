@@ -28,8 +28,8 @@ func (cfg *Config) HandlerRefresh(w http.ResponseWriter, r *http.Request) {
 	refreshHash := hex.EncodeToString(hash[:])
 
 	blacklisted, err := cfg.Redis.Get(ctx, "bl:"+refreshHash).Result()
-	if err != nil || errors.Is(err, redis.Nil) {
-		RespondWithError(w, http.StatusInternalServerError, "redis_error", "Redis read failed", "", nil)
+	if err != nil && errors.Is(err, redis.Nil) {
+		RespondWithError(w, http.StatusInternalServerError, "redis_error", "Redis read failed", "", err)
 		return
 	}
 	if blacklisted == "1" {
@@ -100,7 +100,8 @@ func (cfg *Config) HandlerRefresh(w http.ResponseWriter, r *http.Request) {
 		UserAgent: session.UserAgent,
 		IpAddress: session.IpAddress,
 		CreatedAt: now,
-		ExpiresAt: session.MaxExpiresAt,
+		ExpiresAt: newExpires,
+		MaxExpiresAt: session.MaxExpiresAt,
 		LastUsedAt: sql.NullTime{
 			Time:  now,
 			Valid: true,

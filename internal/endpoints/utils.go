@@ -83,7 +83,7 @@ func shouldUserSecureCookie(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
 	}
-	if strings.EqualFold(r.Header.Get("X-Forwarded-For"), "https"){
+	if strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https"){
 		return true
 	}
 	return false

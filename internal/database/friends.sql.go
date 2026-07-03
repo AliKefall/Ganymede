@@ -46,7 +46,7 @@ func (q *Queries) CreateFriendship(ctx context.Context, arg CreateFriendshipPara
 
 const deleteFriendRequest = `-- name: DeleteFriendRequest :exec
 DELETE FROM friend_requests
-WHERE requester_id = $1 AND target_id = $2
+WHERE (requester_id = $1 AND target_id = $2) OR (requester_id = $2 AND target_id = $1)
 `
 
 type DeleteFriendRequestParams struct {
@@ -77,7 +77,7 @@ func (q *Queries) DeleteFriendship(ctx context.Context, arg DeleteFriendshipPara
 const friendRequestExists = `-- name: FriendRequestExists :one
 SELECT COUNT(1)
 FROM friend_requests
-WHERE requester_id = $1 AND target_id = $2
+WHERE (requester_id = $1 AND target_id = $2) OR (requester_id = $2 AND target_id = $1)
 `
 
 type FriendRequestExistsParams struct {

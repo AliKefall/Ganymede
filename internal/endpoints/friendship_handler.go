@@ -246,11 +246,11 @@ func (cfg *Config) HandleFriendRequests(w http.ResponseWriter, r *http.Request) 
 	})
 }
 func getUsernames(users []database.User) []string {
-    result := make([]string, 0, len(users))
+	result := make([]string, 0, len(users))
 
-    for _, u := range users {
-        result = append(result, u.Username)
-    }
+	for _, u := range users {
+		result = append(result, u.Username)
+	}
 
-    return result
+	return result
 }

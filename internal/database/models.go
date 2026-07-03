@@ -40,7 +40,7 @@ type Match struct {
 type MatchMove struct {
 	ID          int64
 	MatchID     uuid.UUID
-	MoveNumber  uuid.UUID
+	MoveNumber  int32
 	PlayerID    uuid.UUID
 	San         string
 	Uci         string

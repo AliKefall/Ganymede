@@ -26,12 +26,12 @@ func main() {
 		Handler: router,
 	}
 
+	go waitForShutdown(&srv)
+
 	log.Printf("Server listening on: %s", config.Port)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server failed: %v", err)
 	}
-
-	go waitForShutdown(&srv)
 
 }
 

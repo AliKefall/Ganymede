@@ -77,6 +77,10 @@ func (cfg *Config) HandlerRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondWithJSON(w, http.StatusCreated, struct{}{})
+	//NOTE: Never ever return an empty struct ever.
+	//Eslint gave me a smack about it.
+	RespondWithJSON(w, http.StatusCreated, map[string]string{
+		"message": "user created",
+	})
 
 }

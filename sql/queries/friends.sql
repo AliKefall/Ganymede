@@ -28,11 +28,11 @@ VALUES($1, $2, $3);
 -- name: FriendRequestExists :one
 SELECT COUNT(1)
 FROM friend_requests
-WHERE requester_id = $1 AND target_id = $2;
+WHERE (requester_id = $1 AND target_id = $2) OR (requester_id = $2 AND target_id = $1);
 
 -- name: DeleteFriendRequest :exec
 DELETE FROM friend_requests
-WHERE requester_id = $1 AND target_id = $2;
+WHERE (requester_id = $1 AND target_id = $2) OR (requester_id = $2 AND target_id = $1);
 
 -- name: ListIncomingFriendRequestsByUserID :many
 SELECT u.*

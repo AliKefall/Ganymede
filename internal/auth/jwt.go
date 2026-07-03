@@ -57,7 +57,7 @@ func (j *JWTManager) Verify(tokenStr string) (*Claims, error) {
 	}
 
 	claims, ok := token.Claims.(*Claims)
-	if !ok || token.Valid {
+	if !ok || !token.Valid {
 		return nil, errors.New("Invalid token")
 	}
 	return claims, nil

@@ -68,8 +68,7 @@ func ServeWS(
 		metrics.ObserveWSConnection("connected")
 	}
 
-	ctx := r.Context()
-	client := NewClient(ctx, conn, hub, metrics, userID, username)
+	client := NewClient(conn, hub, metrics, userID, username)
 
 	select {
 	case hub.register <- client:

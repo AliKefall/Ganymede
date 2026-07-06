@@ -18,10 +18,13 @@ const (
 	TypeSendMessage = "send_message"
 
 	//Outbound
-	TypeNewMessage    = "new_message"
-	TypeError         = "error"
+	TypeNewMessage = "new_message"
+	TypeError      = "error"
 
+	TypeFriendOnline = "friend_online"
+	TypeFriendOffline = "friend_offline"
 )
+
 
 var (
 	ErrRecipientRequired = errors.New("recipient is required")
@@ -60,16 +63,16 @@ type NewMessagePayload struct {
 
 // atomic alignment for 32 bit system. Active always must come first
 type Hub struct {
-	active             int64
-	mu                 sync.RWMutex
-	clients            map[*Client]bool
-	users              map[string]map[*Client]bool
-	queries            *database.Queries
-	metrics            *observability.Metrics
-	register           chan *Client
-	unregister         chan *Client
+	active     int64
+	mu         sync.RWMutex
+	clients    map[*Client]bool
+	users      map[string]map[*Client]bool
+	queries    *database.Queries
+	metrics    *observability.Metrics
+	register   chan *Client
+	unregister chan *Client
 
-	inbound            chan inbound
+	inbound chan inbound
 }
 
 func NewHub(queries *database.Queries, metrics *observability.Metrics) *Hub {
@@ -250,4 +253,12 @@ func (h *Hub) unregisterClient(c *Client) {
 	}
 
 	atomic.AddInt64(&h.active, -1)
+}
+
+// -----------------------------
+
+func (h *Hub) IsOnline(userID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.users[userID]) > 0
 }

@@ -1,12 +1,12 @@
 package endpoints
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/AliKefall/Somnambulist/internal/database"
 	"github.com/google/uuid"
@@ -17,17 +17,23 @@ type AddFriendRequest struct {
 }
 
 type FriendResponse struct {
-	Username string `json:"username"`
-	Online   bool   `json:"online"`
+	ID       uuid.UUID `json:"id"`
+	Username string    `json:"username"`
+	Online   bool      `json:"online"`
 }
 
 type FriendListResponse struct {
 	Friends []FriendResponse `json:"friends"`
 }
 
+type FriendRequestResponse struct {
+	ID       uuid.UUID `json:"id"`
+	Username string    `json:"username"`
+}
+
 type FriendRequestListResponse struct {
-	Incoming []string `json:"incoming"`
-	Outgoing []string `json:"outgoing"`
+	Incoming []FriendRequestResponse `json:"incoming"`
+	Outgoing []FriendRequestResponse `json:"outgoing"`
 }
 
 func (cfg *Config) mustUserID(r *http.Request) (uuid.UUID, error) {
@@ -36,20 +42,57 @@ func (cfg *Config) mustUserID(r *http.Request) (uuid.UUID, error) {
 	if !ok {
 		return uuid.Nil, errors.New("missing user id")
 	}
+
 	return id, nil
 }
 
-func normalizeFriendPair(userID, friendID string) (string, string) {
-	if userID < friendID {
-		return userID, friendID
+func normalizeFriendPair(a, b uuid.UUID) (uuid.UUID, uuid.UUID) {
+	if a.String() < b.String() {
+		return a, b
 	}
-	return friendID, userID
+	return b, a
 }
+func mapIncomingRequests(
+	users []database.ListIncomingFriendRequestsByUserIDRow,
+) []FriendRequestResponse {
 
+	result := make([]FriendRequestResponse, 0, len(users))
+
+	for _, u := range users {
+		result = append(result, FriendRequestResponse{
+			ID:       u.ID,
+			Username: u.Username,
+		})
+	}
+
+	return result
+}
+func mapOutgoingRequests(
+	users []database.ListOutgoingFriendRequestsByUserIDRow,
+) []FriendRequestResponse {
+
+	result := make([]FriendRequestResponse, 0, len(users))
+
+	for _, u := range users {
+		result = append(result, FriendRequestResponse{
+			ID:       u.ID,
+			Username: u.Username,
+		})
+	}
+
+	return result
+}
 func (cfg *Config) HandleListFriends(w http.ResponseWriter, r *http.Request) {
 	uid, err := cfg.mustUserID(r)
 	if err != nil {
-		RespondWithError(w, http.StatusUnauthorized, "friends_error", "Unauthorized", "", err)
+		RespondWithError(
+			w,
+			http.StatusUnauthorized,
+			"unauthorized",
+			"unauthorized",
+			"",
+			err,
+		)
 		return
 	}
 
@@ -61,15 +104,25 @@ func (cfg *Config) HandleListFriends(w http.ResponseWriter, r *http.Request) {
 			FriendID: uid,
 		},
 	)
+
 	if err != nil {
-		RespondWithError(w, http.StatusInternalServerError, "database_error", "Database error at friends endpoint", "", err)
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"database_error",
+			"Could not load friends",
+			"",
+			err,
+		)
 		return
 	}
 
 	resp := make([]FriendResponse, 0, len(friends))
-	for _, friend := range friends {
+
+	for _, f := range friends {
 		resp = append(resp, FriendResponse{
-			Username: friend.Username,
+			ID:       f.ID,
+			Username: f.Username,
 			Online:   false,
 		})
 	}
@@ -78,53 +131,104 @@ func (cfg *Config) HandleListFriends(w http.ResponseWriter, r *http.Request) {
 		return resp[i].Username < resp[j].Username
 	})
 
-	RespondWithJSON(w, 200, FriendListResponse{Friends: resp})
-
+	RespondWithJSON(w, http.StatusOK, FriendListResponse{Friends: resp})
 }
 
 func (cfg *Config) HandleSendFriendRequest(w http.ResponseWriter, r *http.Request) {
 	uid, err := cfg.mustUserID(r)
 	if err != nil {
-		RespondWithError(w, http.StatusUnauthorized, "friends_error", "Unauthorized", "", err)
+		RespondWithError(
+			w,
+			http.StatusUnauthorized,
+			"unauthorized",
+			"unauthorized",
+			"",
+			err,
+		)
 		return
 	}
 
 	var req AddFriendRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondWithError(w, http.StatusBadRequest, "json_error", "Invalid request body", "", err)
-		return
-	}
-	username := strings.TrimSpace(req.Username)
 
-	target, err := cfg.Queries.GetUserByUsername(r.Context(), username)
-	if err != nil {
-		RespondWithError(w, http.StatusNotFound, "not_found", "User not found", "", err)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondWithError(
+			w,
+			http.StatusBadRequest,
+			"invalid_body",
+			"Invalid request body",
+			"",
+			err,
+		)
+		return
+
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+
+	if req.Username == "" {
+		RespondWithError(
+			w,
+			http.StatusBadRequest,
+			"empty_username",
+			"Username is required",
+			"",
+			nil,
+		)
 		return
 	}
+
+	target, err := cfg.Queries.GetUserByUsername(
+		r.Context(),
+		req.Username,
+	)
 
 	if target.ID == uid {
-		RespondWithError(w, http.StatusBadRequest, "self_request", "You can not add yourself as a friend", "", nil)
+		RespondWithError(
+			w,
+			http.StatusBadRequest,
+			"self_request",
+			"You cannot add yourself",
+			"",
+			nil,
+		)
 		return
 	}
 
-	a, b := normalizeFriendPair(uid.String(), target.ID.String())
-	aid, _ := uuid.Parse(a)
-	bid, _ := uuid.Parse(b)
+	a, b := normalizeFriendPair(uid, target.ID)
 
-	exists, _ := cfg.Queries.FriendshipExists(
+	friendshipExists, err := cfg.Queries.FriendshipExists(
 		r.Context(),
 		database.FriendshipExistsParams{
-			UserID:   aid,
-			FriendID: bid,
+			UserID:   a,
+			FriendID: b,
 		},
 	)
 
-	if exists > 0 {
-		RespondWithError(w, http.StatusBadRequest, "already_friends", "You are already friends", "", nil)
+	if err != nil {
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"database_error",
+			"Database error",
+			"",
+			err,
+		)
 		return
 	}
 
-	existsReq, _ := cfg.Queries.FriendRequestExists(
+	if friendshipExists {
+		RespondWithError(
+			w,
+			http.StatusConflict,
+			"already_friends",
+			"You are already friends",
+			"",
+			nil,
+		)
+		return
+	}
+
+	requestExists, err := cfg.Queries.FriendRequestExists(
 		r.Context(),
 		database.FriendRequestExistsParams{
 			RequesterID: uid,
@@ -132,125 +236,384 @@ func (cfg *Config) HandleSendFriendRequest(w http.ResponseWriter, r *http.Reques
 		},
 	)
 
-	if existsReq > 0 {
-		RespondWithError(w, http.StatusBadRequest, "request_exists", "You already have a request", "", nil)
+	if requestExists {
+		RespondWithError(
+			w,
+			http.StatusConflict,
+			"request_exists",
+			"friend request already exists",
+			"",
+			nil,
+		)
 		return
 	}
 
-	err = cfg.Queries.CreateFriendRequest(
+	rows, err := cfg.Queries.CreateFriendRequest(
 		r.Context(),
 		database.CreateFriendRequestParams{
 			RequesterID: uid,
 			TargetID:    target.ID,
-			CreatedAt:   time.Now().UTC(),
 		},
 	)
 
 	if err != nil {
-		RespondWithError(w, http.StatusInternalServerError, "database_error", "Database error at friends endpoint", "", err)
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"database_error",
+			"Could not create friend request",
+			"",
+			err,
+		)
 		return
 	}
 
-	RespondWithJSON(w, http.StatusCreated, map[string]string{"message": "created"})
+	if rows == 0 {
+		RespondWithError(
+			w,
+			http.StatusConflict,
+			"request_not_created",
+			"Friend request was not created",
+			"",
+			nil,
+		)
+		return
+	}
+
+	RespondWithJSON(w, http.StatusCreated, map[string]string{
+		"message": "friend request created",
+	})
 }
 
 func (cfg *Config) HandleAcceptFriendRequest(w http.ResponseWriter, r *http.Request) {
 	uid, err := cfg.mustUserID(r)
 	if err != nil {
-		RespondWithError(w, http.StatusUnauthorized, "friends_error", "unauthorized", "", err)
+		RespondWithError(
+			w, http.StatusUnauthorized,
+			"unauthorized",
+			"unauthorized",
+			"",
+			err,
+		)
 		return
 	}
 
 	var req AddFriendRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondWithError(w, http.StatusBadRequest, "json_error", "Invalid json body", "", err)
+		RespondWithError(
+			w,
+			http.StatusBadRequest,
+			"invalid_body",
+			"invalid request body",
+			"",
+			err,
+		)
 		return
 	}
 
-	username := strings.TrimSpace(req.Username)
+	req.Username = strings.TrimSpace(req.Username)
 
-	u, err := cfg.Queries.GetUserByUsername(r.Context(), username)
+	user, err := cfg.Queries.GetUserByUsername(r.Context(), req.Username)
 	if err != nil {
-		RespondWithError(w, http.StatusNotFound, "not_found", "User not found", "", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondWithError(
+				w,
+				http.StatusNotFound,
+				"user_not_found",
+				"User not found",
+				"",
+				nil,
+			)
+			return
+		}
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"database_error",
+			"Database error",
+			"",
+			err,
+		)
 		return
 	}
 
-	tx, _ := cfg.DB.BeginTx(r.Context(), nil)
-	defer tx.Rollback()
+	tx, err := cfg.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"transaction_error",
+			"Could not start transaction",
+			"",
+			err,
+		)
+
+		return
+	}
+
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
 	qtx := cfg.Queries.WithTx(tx)
+	if err := cfg.Queries.DeleteFriendRequest(
+		r.Context(),
+		database.DeleteFriendRequestParams{
+			RequesterID: user.ID,
+			TargetID:    uid,
+		},
+	); err != nil {
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"database_error",
+			"Could not delete friend request",
+			"",
+			err,
+		)
+		return
+	}
 
-	_ = qtx.DeleteFriendRequest(r.Context(), database.DeleteFriendRequestParams{
-		RequesterID: u.ID,
-		TargetID:    uid,
-	})
+	a, b := normalizeFriendPair(uid, user.ID)
 
-	a, b := normalizeFriendPair(uid.String(), u.ID.String())
-	aid, _ := uuid.Parse(a)
-	bid, _ := uuid.Parse(b)
+	rows, err := qtx.CreateFriendship(
+		r.Context(),
+		database.CreateFriendshipParams{
+			UserID:   a,
+			FriendID: b,
+		},
+	)
+	if err != nil {
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"database_error",
+			"Could not create friendship",
+			"",
+			err,
+		)
 
-	_ = qtx.CreateFriendship(r.Context(), database.CreateFriendshipParams{
-		UserID:    aid,
-		FriendID:  bid,
-		CreatedAt: time.Now().UTC(),
-	})
+		return
+	}
 
-	tx.Commit()
+	if rows == 0 {
+		RespondWithError(
+			w,
+			http.StatusConflict,
+			"friendship_not_created",
+			"Friendship already exists",
+			"",
+			nil,
+		)
+		return
+	}
 
-	RespondWithJSON(w, http.StatusOK, map[string]string{
-		"message": "accepted",
-	})
+	if err := tx.Commit(); err != nil {
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"transaction_error",
+			"Transaction commit failed",
+			"",
+			err,
+		)
+		return
+	}
+
+	RespondWithJSON(
+		w,
+		http.StatusOK,
+		map[string]string{
+			"message": "friend request accepted",
+		},
+	)
 }
 
 func (cfg *Config) HandleRejectFriendRequest(w http.ResponseWriter, r *http.Request) {
 	uid, err := cfg.mustUserID(r)
 	if err != nil {
-		RespondWithError(w, http.StatusUnauthorized, "friends_error", "Unauthorized", "", err)
+		RespondWithError(
+			w,
+			http.StatusUnauthorized,
+			"unauthorized",
+			"unauthorized",
+			"",
+			err,
+		)
 		return
 	}
 
 	var req AddFriendRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
-
-	u, err := cfg.Queries.GetUserByUsername(r.Context(), req.Username)
-	if err != nil {
-		RespondWithError(w, http.StatusNotFound, "not_found", "User not found", "", err)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondWithError(
+			w,
+			http.StatusBadRequest,
+			"invalid_body",
+			"Invalid request body",
+			"",
+			err,
+		)
 		return
 	}
 
-	_ = cfg.Queries.DeleteFriendRequest(r.Context(),
+	user, err := cfg.Queries.GetUserByUsername(r.Context(), strings.TrimSpace(req.Username))
+	if err != nil {
+		RespondWithError(
+			w,
+			http.StatusNotFound,
+			"user_not_found",
+			"User not found",
+			"",
+			err,
+		)
+		return
+	}
+
+	if err := cfg.Queries.DeleteFriendRequest(
+		r.Context(),
 		database.DeleteFriendRequestParams{
-			RequesterID: u.ID,
+			RequesterID: user.ID,
 			TargetID:    uid,
-		})
-	RespondWithJSON(w, http.StatusOK, map[string]string{
-		"message": "rejected",
-	})
+		},
+	); err != nil {
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"database_error",
+			"Could not delete friend request",
+			"",
+			err,
+		)
+		return
+	}
+	RespondWithJSON(
+		w,
+		http.StatusOK,
+		map[string]string{
+			"message": "friend request rejected",
+		},
+	)
 }
 
 func (cfg *Config) HandleFriendRequests(w http.ResponseWriter, r *http.Request) {
 	uid, err := cfg.mustUserID(r)
 	if err != nil {
-		RespondWithError(w, http.StatusUnauthorized, "friends_error", "Unauthorized", "", err)
+		RespondWithError(
+			w,
+			http.StatusUnauthorized,
+			"unauthorized",
+			"unauthorized",
+			"",
+			err,
+		)
 		return
 	}
 
-	incoming, _ := cfg.Queries.ListIncomingFriendRequestsByUserID(r.Context(), uid)
-	outgoing, _ := cfg.Queries.ListOutgoingFriendRequestsByUserID(r.Context(), uid)
-
-	//NOTE: I still haven't tasted if the user schema is actually json safe or not. So if it is change the
-	// incoming and outgoing types.
-	RespondWithJSON(w, http.StatusOK, FriendRequestListResponse{
-		Incoming: getUsernames(incoming),
-		Outgoing: getUsernames(outgoing),
-	})
-}
-func getUsernames(users []database.User) []string {
-	result := make([]string, 0, len(users))
-
-	for _, u := range users {
-		result = append(result, u.Username)
+	incoming, err := cfg.Queries.ListIncomingFriendRequestsByUserID(
+		r.Context(),
+		uid,
+	)
+	if err != nil {
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"database_error",
+			"Could not load incoming requests",
+			"",
+			err,
+		)
+		return
 	}
 
-	return result
+	outgoing, err := cfg.Queries.ListOutgoingFriendRequestsByUserID(
+		r.Context(),
+		uid,
+	)
+
+	if err != nil {
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"database_error",
+			"Could not load outgoing requests",
+			"",
+			err,
+		)
+		return
+	}
+
+	RespondWithJSON(w, http.StatusOK, FriendRequestListResponse{
+		Incoming: mapIncomingRequests(incoming),
+		Outgoing: mapOutgoingRequests(outgoing),
+	})
+
+}
+
+func (cfg *Config) HandleDeleteFriend(w http.ResponseWriter, r *http.Request) {
+	uid, err := cfg.mustUserID(r)
+	if err != nil {
+		RespondWithError(
+			w,
+			http.StatusUnauthorized,
+			"unauthorized",
+			"unauthorized",
+			"",
+			err,
+		)
+		return
+	}
+
+	username := strings.TrimSpace(r.PathValue("username"))
+	if username == "" {
+		RespondWithError(
+			w,
+			http.StatusBadRequest,
+			"invalid_username",
+			"username is required",
+			"",
+			nil,
+		)
+		return
+	}
+
+	friend, err := cfg.Queries.GetUserByUsername(r.Context(), username)
+	if err != nil {
+		RespondWithError(
+			w,
+			http.StatusNotFound,
+			"user_not_found",
+			"user not found",
+			"",
+			nil,
+		)
+		return
+	}
+
+	a, b := normalizeFriendPair(uid, friend.ID)
+
+	if err := cfg.Queries.DeleteFriendship(
+		r.Context(),
+		database.DeleteFriendshipParams{
+			UserID:   a,
+			FriendID: b,
+		},
+	); err != nil {
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"database_error",
+			"Could not delete friendship",
+			"",
+			err,
+		)
+		return
+	}
+
+	RespondWithJSON(
+		w,
+		http.StatusOK,
+		map[string]string{
+			"message": "friend deleted",
+		},
+	)
 }

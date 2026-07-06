@@ -12,41 +12,64 @@ import (
 	"github.com/google/uuid"
 )
 
-const createFriendRequest = `-- name: CreateFriendRequest :exec
-INSERT INTO friend_requests(requester_id, target_id, created_at)
-VALUES($1, $2, $3)
+const createFriendRequest = `-- name: CreateFriendRequest :execrows
+INSERT INTO friend_requests (
+    requester_id,
+    target_id
+)
+VALUES (
+    $1,
+    $2
+)
+ON CONFLICT DO NOTHING
 `
 
 type CreateFriendRequestParams struct {
 	RequesterID uuid.UUID
 	TargetID    uuid.UUID
-	CreatedAt   time.Time
 }
 
-func (q *Queries) CreateFriendRequest(ctx context.Context, arg CreateFriendRequestParams) error {
-	_, err := q.db.ExecContext(ctx, createFriendRequest, arg.RequesterID, arg.TargetID, arg.CreatedAt)
-	return err
+func (q *Queries) CreateFriendRequest(ctx context.Context, arg CreateFriendRequestParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, createFriendRequest, arg.RequesterID, arg.TargetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
-const createFriendship = `-- name: CreateFriendship :exec
-INSERT INTO friendships(user_id, friend_id, created_at)
-VALUES($1, $2, $3)
+const createFriendship = `-- name: CreateFriendship :execrows
+
+INSERT INTO friendships (
+    user_id,
+    friend_id
+)
+VALUES (
+    $1,
+    $2
+)
+ON CONFLICT DO NOTHING
 `
 
 type CreateFriendshipParams struct {
-	UserID    uuid.UUID
-	FriendID  uuid.UUID
-	CreatedAt time.Time
+	UserID   uuid.UUID
+	FriendID uuid.UUID
 }
 
-func (q *Queries) CreateFriendship(ctx context.Context, arg CreateFriendshipParams) error {
-	_, err := q.db.ExecContext(ctx, createFriendship, arg.UserID, arg.FriendID, arg.CreatedAt)
-	return err
+// -----------------------------------------------------
+func (q *Queries) CreateFriendship(ctx context.Context, arg CreateFriendshipParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, createFriendship, arg.UserID, arg.FriendID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deleteFriendRequest = `-- name: DeleteFriendRequest :exec
 DELETE FROM friend_requests
-WHERE (requester_id = $1 AND target_id = $2) OR (requester_id = $2 AND target_id = $1)
+WHERE
+(requester_id = $1 AND target_id = $2)
+OR
+(requester_id = $2 AND target_id = $1)
 `
 
 type DeleteFriendRequestParams struct {
@@ -61,7 +84,8 @@ func (q *Queries) DeleteFriendRequest(ctx context.Context, arg DeleteFriendReque
 
 const deleteFriendship = `-- name: DeleteFriendship :exec
 DELETE FROM friendships
-WHERE user_id = $1 AND friend_id = $2
+WHERE user_id = $1
+  AND friend_id = $2
 `
 
 type DeleteFriendshipParams struct {
@@ -75,9 +99,14 @@ func (q *Queries) DeleteFriendship(ctx context.Context, arg DeleteFriendshipPara
 }
 
 const friendRequestExists = `-- name: FriendRequestExists :one
-SELECT COUNT(1)
-FROM friend_requests
-WHERE (requester_id = $1 AND target_id = $2) OR (requester_id = $2 AND target_id = $1)
+SELECT EXISTS (
+    SELECT 1
+    FROM friend_requests
+    WHERE
+        (requester_id = $1 AND target_id = $2)
+        OR
+        (requester_id = $2 AND target_id = $1)
+)
 `
 
 type FriendRequestExistsParams struct {
@@ -85,17 +114,20 @@ type FriendRequestExistsParams struct {
 	TargetID    uuid.UUID
 }
 
-func (q *Queries) FriendRequestExists(ctx context.Context, arg FriendRequestExistsParams) (int64, error) {
+func (q *Queries) FriendRequestExists(ctx context.Context, arg FriendRequestExistsParams) (bool, error) {
 	row := q.db.QueryRowContext(ctx, friendRequestExists, arg.RequesterID, arg.TargetID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const friendshipExists = `-- name: FriendshipExists :one
-SELECT COUNT(1)
-FROM friendships
-WHERE user_id = $1 AND friend_id = $2
+SELECT EXISTS (
+    SELECT 1
+    FROM friendships
+    WHERE user_id = $1
+      AND friend_id = $2
+)
 `
 
 type FriendshipExistsParams struct {
@@ -103,21 +135,28 @@ type FriendshipExistsParams struct {
 	FriendID uuid.UUID
 }
 
-func (q *Queries) FriendshipExists(ctx context.Context, arg FriendshipExistsParams) (int64, error) {
+func (q *Queries) FriendshipExists(ctx context.Context, arg FriendshipExistsParams) (bool, error) {
 	row := q.db.QueryRowContext(ctx, friendshipExists, arg.UserID, arg.FriendID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listFriendsByUserID = `-- name: ListFriendsByUserID :many
-SELECT u.id, u.email, u.username, u.password, u.created_at, u.updated_at
-FROM friendships AS f
-JOIN users AS u ON u.id = CASE
-WHEN f.user_id = $1 THEN f.friend_id
-ELSE f.user_id
+SELECT
+    u.id,
+    u.username,
+    u.created_at
+FROM friendships f
+JOIN users u
+ON u.id = CASE
+    WHEN f.user_id = $1
+        THEN f.friend_id
+    ELSE
+        f.user_id
 END
-WHERE f.user_id = $2 OR f.friend_id = $3
+WHERE f.user_id = $2
+   OR f.friend_id = $3
 ORDER BY u.username
 `
 
@@ -127,23 +166,22 @@ type ListFriendsByUserIDParams struct {
 	FriendID uuid.UUID
 }
 
-func (q *Queries) ListFriendsByUserID(ctx context.Context, arg ListFriendsByUserIDParams) ([]User, error) {
+type ListFriendsByUserIDRow struct {
+	ID        uuid.UUID
+	Username  string
+	CreatedAt time.Time
+}
+
+func (q *Queries) ListFriendsByUserID(ctx context.Context, arg ListFriendsByUserIDParams) ([]ListFriendsByUserIDRow, error) {
 	rows, err := q.db.QueryContext(ctx, listFriendsByUserID, arg.UserID, arg.UserID_2, arg.FriendID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []User
+	var items []ListFriendsByUserIDRow
 	for rows.Next() {
-		var i User
-		if err := rows.Scan(
-			&i.ID,
-			&i.Email,
-			&i.Username,
-			&i.Password,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
+		var i ListFriendsByUserIDRow
+		if err := rows.Scan(&i.ID, &i.Username, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -158,30 +196,33 @@ func (q *Queries) ListFriendsByUserID(ctx context.Context, arg ListFriendsByUser
 }
 
 const listIncomingFriendRequestsByUserID = `-- name: ListIncomingFriendRequestsByUserID :many
-SELECT u.id, u.email, u.username, u.password, u.created_at, u.updated_at
-FROM friend_requests AS fr
-JOIN users AS u ON u.id = fr.requester_id
+SELECT
+    u.id,
+    u.username,
+    u.created_at
+FROM friend_requests fr
+JOIN users u
+ON u.id = fr.requester_id
 WHERE fr.target_id = $1
 ORDER BY fr.created_at DESC
 `
 
-func (q *Queries) ListIncomingFriendRequestsByUserID(ctx context.Context, targetID uuid.UUID) ([]User, error) {
+type ListIncomingFriendRequestsByUserIDRow struct {
+	ID        uuid.UUID
+	Username  string
+	CreatedAt time.Time
+}
+
+func (q *Queries) ListIncomingFriendRequestsByUserID(ctx context.Context, targetID uuid.UUID) ([]ListIncomingFriendRequestsByUserIDRow, error) {
 	rows, err := q.db.QueryContext(ctx, listIncomingFriendRequestsByUserID, targetID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []User
+	var items []ListIncomingFriendRequestsByUserIDRow
 	for rows.Next() {
-		var i User
-		if err := rows.Scan(
-			&i.ID,
-			&i.Email,
-			&i.Username,
-			&i.Password,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
+		var i ListIncomingFriendRequestsByUserIDRow
+		if err := rows.Scan(&i.ID, &i.Username, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -196,30 +237,33 @@ func (q *Queries) ListIncomingFriendRequestsByUserID(ctx context.Context, target
 }
 
 const listOutgoingFriendRequestsByUserID = `-- name: ListOutgoingFriendRequestsByUserID :many
-SELECT u.id, u.email, u.username, u.password, u.created_at, u.updated_at
-FROM friend_requests AS fr
-JOIN users AS u ON u.id = fr.target_id
+SELECT
+    u.id,
+    u.username,
+    u.created_at
+FROM friend_requests fr
+JOIN users u
+ON u.id = fr.target_id
 WHERE fr.requester_id = $1
 ORDER BY fr.created_at DESC
 `
 
-func (q *Queries) ListOutgoingFriendRequestsByUserID(ctx context.Context, requesterID uuid.UUID) ([]User, error) {
+type ListOutgoingFriendRequestsByUserIDRow struct {
+	ID        uuid.UUID
+	Username  string
+	CreatedAt time.Time
+}
+
+func (q *Queries) ListOutgoingFriendRequestsByUserID(ctx context.Context, requesterID uuid.UUID) ([]ListOutgoingFriendRequestsByUserIDRow, error) {
 	rows, err := q.db.QueryContext(ctx, listOutgoingFriendRequestsByUserID, requesterID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []User
+	var items []ListOutgoingFriendRequestsByUserIDRow
 	for rows.Next() {
-		var i User
-		if err := rows.Scan(
-			&i.ID,
-			&i.Email,
-			&i.Username,
-			&i.Password,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
+		var i ListOutgoingFriendRequestsByUserIDRow
+		if err := rows.Scan(&i.ID, &i.Username, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

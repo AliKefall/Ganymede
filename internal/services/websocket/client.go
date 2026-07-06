@@ -36,14 +36,13 @@ type Client struct {
 }
 
 func NewClient(
-	ctx context.Context,
 	conn *websocket.Conn,
 	hub *Hub,
 	metrics *observability.Metrics,
 	userID,
 	username string,
 ) *Client {
-	cctx, cancel := context.WithCancel(ctx)
+	cctx, cancel := context.WithCancel(context.Background())
 	return &Client{
 		UserID:   userID,
 		Username: username,

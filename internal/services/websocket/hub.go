@@ -21,10 +21,9 @@ const (
 	TypeNewMessage = "new_message"
 	TypeError      = "error"
 
-	TypeFriendOnline = "friend_online"
+	TypeFriendOnline  = "friend_online"
 	TypeFriendOffline = "friend_offline"
 )
-
 
 var (
 	ErrRecipientRequired = errors.New("recipient is required")
@@ -63,16 +62,18 @@ type NewMessagePayload struct {
 
 // atomic alignment for 32 bit system. Active always must come first
 type Hub struct {
-	active     int64
-	mu         sync.RWMutex
-	clients    map[*Client]bool
-	users      map[string]map[*Client]bool
-	queries    *database.Queries
-	metrics    *observability.Metrics
+	active  int64
+	mu      sync.RWMutex
+	clients map[*Client]bool
+	users   map[string]map[*Client]bool
+	queries *database.Queries
+	metrics *observability.Metrics
+
+	Events EventHandler
+
 	register   chan *Client
 	unregister chan *Client
-
-	inbound chan inbound
+	inbound    chan inbound
 }
 
 func NewHub(queries *database.Queries, metrics *observability.Metrics) *Hub {
@@ -85,6 +86,10 @@ func NewHub(queries *database.Queries, metrics *observability.Metrics) *Hub {
 		unregister: make(chan *Client, 256),
 		inbound:    make(chan inbound, 1024),
 	}
+}
+
+func (h *Hub) SetEventHandler(handler EventHandler) {
+	h.Events = handler
 }
 
 func (h *Hub) Register(c *Client) {
@@ -225,7 +230,6 @@ func (h *Hub) ActiveConnection() int64 {
 
 func (h *Hub) registerClient(c *Client) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 
 	h.clients[c] = true
 	if h.users[c.UserID] == nil {
@@ -234,11 +238,26 @@ func (h *Hub) registerClient(c *Client) {
 
 	h.users[c.UserID][c] = true
 	atomic.AddInt64(&h.active, 1)
+
+	h.mu.Unlock()
+
+	if h.Events != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+			defer cancel()
+
+			_ = h.Events.OnUserConnected(ctx, database.User{
+				ID: uuid.MustParse(c.UserID),
+				Username: c.Username,
+			})
+		}()
+
+	}
+
 }
 
 func (h *Hub) unregisterClient(c *Client) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 
 	if _, ok := h.clients[c]; !ok {
 		return
@@ -253,6 +272,20 @@ func (h *Hub) unregisterClient(c *Client) {
 	}
 
 	atomic.AddInt64(&h.active, -1)
+
+	h.mu.Unlock()
+
+	if h.Events != nil {
+		go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+		defer cancel()
+
+		_ = h.Events.OnUserDisconnected(ctx, database.User{
+			ID: uuid.MustParse(c.UserID),
+			Username: c.Username,
+		})
+		}()
+	}
 }
 
 // -----------------------------
@@ -261,4 +294,15 @@ func (h *Hub) IsOnline(userID string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.users[userID]) > 0
+}
+
+// This function is necessary for websocket handler package
+// This function is their delivery system.
+func (h *Hub) SendToUser(userID string, msgType string, payload any) error {
+	msg, err := newMessage(msgType, payload)
+	if err != nil {
+		return err
+	}
+
+	return h.deliver(userID, msg)
 }

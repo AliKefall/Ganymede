@@ -11,6 +11,7 @@ import (
 	"github.com/AliKefall/Somnambulist/internal/endpoints"
 	"github.com/AliKefall/Somnambulist/internal/services/observability"
 	"github.com/AliKefall/Somnambulist/internal/services/websocket"
+	"github.com/AliKefall/Somnambulist/internal/services/websocket/handlers"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/redis/go-redis/v9"
 )
@@ -30,8 +31,13 @@ func bootstrapServer(config *ServerConfig) (*sql.DB, serverDependencies) {
 	metrics := observability.New()
 	hub := websocket.NewHub(queries, metrics)
 	redisClient := NewRedisClient(config.RedisURL)
-
-	handler := endpoints.NewConfig(conn, queries, auth.NewJWTManager(config.JWTSecret, 15*time.Minute), auth.NewPasswordHasher(), redisClient)
+	wsHandler := &handlers.Config{
+		Hub: hub,
+		Queries: queries,
+		RedisClient: redisClient,
+	}
+	hub.SetEventHandler(wsHandler)
+	handler := endpoints.NewConfig(hub, conn, queries, auth.NewJWTManager(config.JWTSecret, 15*time.Minute), auth.NewPasswordHasher(), redisClient)
 	return conn, serverDependencies{
 		config:  handler,
 		queries: queries,

@@ -1,12 +1,14 @@
 package endpoints
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/AliKefall/Somnambulist/internal/database"
 	"github.com/google/uuid"
@@ -123,7 +125,7 @@ func (cfg *Config) HandleListFriends(w http.ResponseWriter, r *http.Request) {
 		resp = append(resp, FriendResponse{
 			ID:       f.ID,
 			Username: f.Username,
-			Online:   false,
+			Online:   cfg.WS.IsOnline(f.ID.String()),
 		})
 	}
 
@@ -356,7 +358,7 @@ func (cfg *Config) HandleAcceptFriendRequest(w http.ResponseWriter, r *http.Requ
 	}()
 
 	qtx := cfg.Queries.WithTx(tx)
-	if err := cfg.Queries.DeleteFriendRequest(
+	if err := qtx.DeleteFriendRequest(
 		r.Context(),
 		database.DeleteFriendRequestParams{
 			RequesterID: user.ID,
@@ -419,7 +421,17 @@ func (cfg *Config) HandleAcceptFriendRequest(w http.ResponseWriter, r *http.Requ
 		)
 		return
 	}
-
+	currentUser, err := cfg.Queries.GetUserByID(r.Context(), uid)
+	if err != nil {
+		RespondWithError(w,
+			http.StatusInternalServerError,
+			"database_error",
+			"Could not load current user",
+			"",
+			err,
+		)
+		return
+	}
 	RespondWithJSON(
 		w,
 		http.StatusOK,
@@ -427,6 +439,14 @@ func (cfg *Config) HandleAcceptFriendRequest(w http.ResponseWriter, r *http.Requ
 			"message": "friend request accepted",
 		},
 	)
+
+	go func(accepter, requester database.User) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_ = cfg.WS.Events.NotifyFriendAccepted(ctx, accepter, requester)
+	}(currentUser, user)
+
 }
 
 func (cfg *Config) HandleRejectFriendRequest(w http.ResponseWriter, r *http.Request) {
@@ -486,6 +506,19 @@ func (cfg *Config) HandleRejectFriendRequest(w http.ResponseWriter, r *http.Requ
 		)
 		return
 	}
+
+	rejecter, err := cfg.Queries.GetUserByID(r.Context(), uid)
+	if err != nil {
+		RespondWithError(
+			w, http.StatusInternalServerError,
+			"database_error",
+			"Could not load current user",
+			"",
+			err,
+		)
+		return
+	}
+
 	RespondWithJSON(
 		w,
 		http.StatusOK,
@@ -493,6 +526,14 @@ func (cfg *Config) HandleRejectFriendRequest(w http.ResponseWriter, r *http.Requ
 			"message": "friend request rejected",
 		},
 	)
+
+	go func(requester, rejecter database.User) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_ = cfg.WS.Events.NotifyFriendRejected(ctx, rejecter, requester)
+	}(user, rejecter)
+
 }
 
 func (cfg *Config) HandleFriendRequests(w http.ResponseWriter, r *http.Request) {

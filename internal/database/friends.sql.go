@@ -15,11 +15,13 @@ import (
 const createFriendRequest = `-- name: CreateFriendRequest :execrows
 INSERT INTO friend_requests (
     requester_id,
-    target_id
+    target_id,
+    created_at
 )
 VALUES (
     $1,
-    $2
+    $2,
+    $3
 )
 ON CONFLICT DO NOTHING
 `
@@ -27,10 +29,11 @@ ON CONFLICT DO NOTHING
 type CreateFriendRequestParams struct {
 	RequesterID uuid.UUID
 	TargetID    uuid.UUID
+	CreatedAt   time.Time
 }
 
 func (q *Queries) CreateFriendRequest(ctx context.Context, arg CreateFriendRequestParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, createFriendRequest, arg.RequesterID, arg.TargetID)
+	result, err := q.db.ExecContext(ctx, createFriendRequest, arg.RequesterID, arg.TargetID, arg.CreatedAt)
 	if err != nil {
 		return 0, err
 	}
@@ -41,23 +44,26 @@ const createFriendship = `-- name: CreateFriendship :execrows
 
 INSERT INTO friendships (
     user_id,
-    friend_id
+    friend_id,
+    created_at
 )
 VALUES (
     $1,
-    $2
+    $2,
+    $3
 )
 ON CONFLICT DO NOTHING
 `
 
 type CreateFriendshipParams struct {
-	UserID   uuid.UUID
-	FriendID uuid.UUID
+	UserID    uuid.UUID
+	FriendID  uuid.UUID
+	CreatedAt time.Time
 }
 
 // -----------------------------------------------------
 func (q *Queries) CreateFriendship(ctx context.Context, arg CreateFriendshipParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, createFriendship, arg.UserID, arg.FriendID)
+	result, err := q.db.ExecContext(ctx, createFriendship, arg.UserID, arg.FriendID, arg.CreatedAt)
 	if err != nil {
 		return 0, err
 	}

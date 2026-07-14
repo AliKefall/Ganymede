@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 
 	"github.com/AliKefall/Somnambulist/internal/database"
 )
@@ -72,11 +73,22 @@ func (cfg *Config) OnUserConnected(ctx context.Context, user database.User) erro
 	}
 
 	for _, friend := range friends {
-		_ = cfg.Hub.SendToUser(
+		err = cfg.Hub.SendToUser(
 			friend.ID.String(),
 			TypeFriendOnline,
 			payload,
 		)
+		if err := cfg.Hub.SendToUser(
+			friend.ID.String(),
+			TypeFriendOffline,
+			payload,
+		); err != nil {
+			log.Printf(
+				"Could not send offline event to %s: %v",
+				friend.Username,
+				err,
+			)
+		}
 	}
 
 	return nil
@@ -84,7 +96,7 @@ func (cfg *Config) OnUserConnected(ctx context.Context, user database.User) erro
 
 func (cfg *Config) OnUserDisconnected(ctx context.Context, user database.User) error {
 	friends, err := cfg.Queries.ListFriendsByUserID(ctx, database.ListFriendsByUserIDParams{
-		UserID: user.ID,
+		UserID:   user.ID,
 		UserID_2: user.ID,
 		FriendID: user.ID,
 	})

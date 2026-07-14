@@ -125,18 +125,26 @@ func (c *Client) WritePump() {
 		select {
 		case <-c.ctx.Done():
 			return
-		case firstMsg, ok := <-c.Send:
+
+		case msg, ok := <-c.Send:
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 
 			if !ok {
-				c.Conn.WriteMessage(websocket.CloseMessage, nil)
+				_ = c.Conn.WriteMessage(websocket.CloseMessage, nil)
 				return
 			}
-			if err := c.writeBatch(firstMsg); err != nil {
+
+			if err := c.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
 				return
 			}
+
+			if c.Metrics != nil {
+				c.Metrics.ObserveWSMessage("out", "message")
+			}
+
 		case <-ticker.C:
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
@@ -152,6 +160,13 @@ func (c *Client) sendError(code, message string) {
 	_ = c.writeJSON(msg)
 }
 
+
+
+// NOTE: This is only here for stress testing after this point
+// Reason why we dont use batching is because we don't deal with thousands of events
+// at the same time, if ever needed this function takes as a responsible function for write pump.
+// The second you use it send json as an array because the forntend will be throwing parsing errors.
+/*
 func (c *Client) writeBatch(first []byte) error {
 	w, err := c.Conn.NextWriter(websocket.TextMessage)
 	if err != nil {
@@ -191,3 +206,4 @@ batchDrain:
 
 	return nil
 }
+*/

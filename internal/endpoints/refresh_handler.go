@@ -29,7 +29,14 @@ func (cfg *Config) HandlerRefresh(w http.ResponseWriter, r *http.Request) {
 
 	blacklisted, err := cfg.Redis.Get(ctx, "bl:"+refreshHash).Result()
 	if err != nil && errors.Is(err, redis.Nil) {
-		RespondWithError(w, http.StatusInternalServerError, "redis_error", "Redis read failed", "", err)
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"redis_error",
+			"Redis read failed",
+			"",
+			err,
+		)
 		return
 	}
 	if blacklisted == "1" {
@@ -49,9 +56,29 @@ func (cfg *Config) HandlerRefresh(w http.ResponseWriter, r *http.Request) {
 	qtx := cfg.Queries.WithTx(tx)
 
 	session, err := qtx.GetSessionForUpdateByTokenHash(ctx, refreshHash)
-
 	if err != nil {
-		RespondWithError(w, http.StatusInternalServerError, "refresh_error", "Invalid refresh token", "", nil)
+		if errors.Is(err, sql.ErrNoRows) {
+			clearRefreshToken(w, r)
+
+			RespondWithError(
+				w,
+				http.StatusUnauthorized,
+				"invalid_refresh_token",
+				"Invalid refresh token",
+				"",
+				nil,
+			)
+			return
+		}
+
+		RespondWithError(
+			w,
+			http.StatusInternalServerError,
+			"database_error",
+			"Database error",
+			"",
+			err,
+		)
 		return
 	}
 
@@ -97,10 +124,10 @@ func (cfg *Config) HandlerRefresh(w http.ResponseWriter, r *http.Request) {
 		UserID:           session.UserID,
 		RefreshTokenHash: newRefreshHash,
 
-		UserAgent: session.UserAgent,
-		IpAddress: session.IpAddress,
-		CreatedAt: now,
-		ExpiresAt: newExpires,
+		UserAgent:    session.UserAgent,
+		IpAddress:    session.IpAddress,
+		CreatedAt:    now,
+		ExpiresAt:    newExpires,
 		MaxExpiresAt: session.MaxExpiresAt,
 		LastUsedAt: sql.NullTime{
 			Time:  now,

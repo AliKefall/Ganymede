@@ -255,6 +255,7 @@ func (cfg *Config) HandleSendFriendRequest(w http.ResponseWriter, r *http.Reques
 		database.CreateFriendRequestParams{
 			RequesterID: uid,
 			TargetID:    target.ID,
+			CreatedAt:   time.Now().UTC(),
 		},
 	)
 
@@ -383,6 +384,7 @@ func (cfg *Config) HandleAcceptFriendRequest(w http.ResponseWriter, r *http.Requ
 		database.CreateFriendshipParams{
 			UserID:   a,
 			FriendID: b,
+			CreatedAt: time.Now().UTC(),
 		},
 	)
 	if err != nil {

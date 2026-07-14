@@ -1,0 +1,3 @@
+{"dsn":"https://dsn@sentry10.cfdata.org/0"}
+{"type":"session","length":235}
+{"init":true,"sid":"bbcfa83c-bd4e-4bf4-8bdd-c4105375b870","status":"crashed","errors":1,"started":"2026-07-12T18:09:45.015449Z","duration":0.497893,"attrs":{"release":"shared_client@2026.6.836+2026.6.836.0","environment":"production"}}

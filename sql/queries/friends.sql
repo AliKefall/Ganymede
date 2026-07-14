@@ -1,11 +1,13 @@
 -- name: CreateFriendRequest :execrows
 INSERT INTO friend_requests (
     requester_id,
-    target_id
+    target_id,
+    created_at
 )
 VALUES (
     $1,
-    $2
+    $2,
+    $3
 )
 ON CONFLICT DO NOTHING;
 
@@ -57,11 +59,13 @@ ORDER BY fr.created_at DESC;
 -- name: CreateFriendship :execrows
 INSERT INTO friendships (
     user_id,
-    friend_id
+    friend_id,
+    created_at
 )
 VALUES (
     $1,
-    $2
+    $2,
+    $3
 )
 ON CONFLICT DO NOTHING;
 

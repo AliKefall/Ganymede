@@ -13,6 +13,10 @@ import (
 	"github.com/google/uuid"
 )
 
+// Right now this architecture supports multi-account.
+// BUT I will not use this for chess system have some other thing in my mind
+
+
 const (
 	//Inbound
 	TypeSendMessage = "send_message"

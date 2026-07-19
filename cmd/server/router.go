@@ -40,6 +40,7 @@ func buildRouter(config *ServerConfig, deps serverDependencies) chi.Router {
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
+	log.Printf("Allowed origins: %#v", config.AllowedOrigins)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(securityHeaderMiddleware)
@@ -74,6 +75,9 @@ func buildRouter(config *ServerConfig, deps serverDependencies) chi.Router {
 		pr.Post("/friends/requests", deps.config.HandleSendFriendRequest)
 		pr.Post("/friends/requests/accept", deps.config.HandleAcceptFriendRequest)
 		pr.Post("/friends/requests/reject", deps.config.HandleRejectFriendRequest)
+		pr.Get("/chat/conversations", deps.config.HandleListConversations)
+		pr.Get("/chat/conversations/{conversationID}/messages", deps.config.HandleConversationMessages)
+
 	})
 
 	r.Route("/auth", func(ar chi.Router) {

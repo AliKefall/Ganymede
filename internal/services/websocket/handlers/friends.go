@@ -30,6 +30,7 @@ type FriendPresencePayload struct {
 	Online   bool   `json:"online"`
 }
 
+
 func (cfg *Config) NotifyFriendAccepted(ctx context.Context, accepter database.User, requester database.User) error {
 	return cfg.Hub.SendToUser(
 		requester.ID.String(),

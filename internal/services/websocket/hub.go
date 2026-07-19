@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/AliKefall/Somnambulist/internal/database"
+	"github.com/AliKefall/Somnambulist/internal/services/chat"
 	"github.com/AliKefall/Somnambulist/internal/services/observability"
 	"github.com/google/uuid"
 )
 
 // Right now this architecture supports multi-account.
 // BUT I will not use this for chess system have some other thing in my mind
-
 
 const (
 	//Inbound
@@ -58,10 +58,19 @@ type inbound struct {
 }
 
 type NewMessagePayload struct {
-	SenderID       string `json:"sender_id"`
+	ID string `json:"id"`
+
+	ConversationID string `json:"conversation_id"`
+
+	SenderID string `json:"sender_id"`
+
 	SenderUsername string `json:"sender_username"`
-	ConversationID string `json:"conversation_id,omitempty"`
-	Content        string `json:"content"`
+
+	RecipientID string `json:"recipient_id"`
+
+	Content string `json:"content"`
+
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // atomic alignment for 32 bit system. Active always must come first
@@ -72,6 +81,7 @@ type Hub struct {
 	users   map[string]map[*Client]bool
 	queries *database.Queries
 	metrics *observability.Metrics
+	chat    *chat.Service
 
 	Events EventHandler
 
@@ -80,12 +90,13 @@ type Hub struct {
 	inbound    chan inbound
 }
 
-func NewHub(queries *database.Queries, metrics *observability.Metrics) *Hub {
+func NewHub(queries *database.Queries, metrics *observability.Metrics, chatService *chat.Service) *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
 		users:      make(map[string]map[*Client]bool),
 		queries:    queries,
 		metrics:    metrics,
+		chat:       chatService,
 		register:   make(chan *Client, 256),
 		unregister: make(chan *Client, 256),
 		inbound:    make(chan inbound, 1024),
@@ -147,34 +158,87 @@ func (h *Hub) dispatch(sender *Client, msg Message) {
 
 func (h *Hub) handleSendMessage(sender *Client, msg Message) {
 	var p SendMessagePayload
+
 	if err := json.Unmarshal(msg.Payload, &p); err != nil {
-		sender.sendError("invalid_payload", "send_message payload could not be parsed")
+		sender.sendError(
+			"invalid_payload",
+			"send_message payload could not be parsed",
+		)
 		return
 	}
+
 	if p.Content == "" {
-		sender.sendError("empty_content", "message content cannot be empty")
+		sender.sendError(
+			"empty_content",
+			"message content cannot be empty",
+		)
 		return
 	}
-	outPayload := NewMessagePayload{
-		SenderID:       sender.UserID,
-		SenderUsername: sender.Username,
-		ConversationID: p.ConversationID,
-		Content:        p.Content,
-	}
-	out, err := newMessage(TypeNewMessage, outPayload)
+
+	recipientID, err := uuid.Parse(p.RecipientID)
 	if err != nil {
-		sender.sendError("internal_error", "Could not build message")
+		sender.sendError(
+			"invalid_recipient",
+			"recipient id is invalid",
+		)
 		return
 	}
 
-	if err := h.deliver(p.RecipientID, out); err != nil {
-		sender.sendError("recipient_offline", ErrRecipientOffline.Error())
+	senderID := uuid.MustParse(sender.UserID)
+
+	dbMessage, err := h.chat.SendMessage(
+		context.Background(),
+		senderID,
+		recipientID,
+		p.Content,
+	)
+	if err != nil {
+		sender.sendError(
+			"send_message_failed",
+			err.Error(),
+		)
 		return
 	}
 
-	// Sender echo so they can see their own message too.
-	_ = sender.writeJSON(out)
+	payload := NewMessagePayload{
+		ID: dbMessage.ID.String(),
 
+		ConversationID: dbMessage.ConversationID.String(),
+
+		SenderID: sender.UserID,
+
+		SenderUsername: sender.Username,
+
+		RecipientID: recipientID.String(),
+
+		Content: dbMessage.Content,
+
+		CreatedAt: dbMessage.CreatedAt,
+	}
+
+	out, err := newMessage(
+		TypeNewMessage,
+		payload,
+	)
+	if err != nil {
+		sender.sendError(
+			"internal_error",
+			"could not build websocket message",
+		)
+		return
+	}
+
+	if err := h.deliver(recipientID.String(), out); err != nil {
+		sender.sendError(
+			"recipient_offline",
+			ErrRecipientOffline.Error(),
+		)
+		return
+	}
+
+	if err := sender.writeJSON(out); err != nil {
+		sender.Close()
+	}
 }
 
 func newMessage(msgType string, payload any) (Message, error) {
@@ -247,11 +311,11 @@ func (h *Hub) registerClient(c *Client) {
 
 	if h.Events != nil {
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			_ = h.Events.OnUserConnected(ctx, database.User{
-				ID: uuid.MustParse(c.UserID),
+				ID:       uuid.MustParse(c.UserID),
 				Username: c.Username,
 			})
 		}()
@@ -281,13 +345,13 @@ func (h *Hub) unregisterClient(c *Client) {
 
 	if h.Events != nil {
 		go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
-		defer cancel()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 
-		_ = h.Events.OnUserDisconnected(ctx, database.User{
-			ID: uuid.MustParse(c.UserID),
-			Username: c.Username,
-		})
+			_ = h.Events.OnUserDisconnected(ctx, database.User{
+				ID:       uuid.MustParse(c.UserID),
+				Username: c.Username,
+			})
 		}()
 	}
 }

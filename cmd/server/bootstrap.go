@@ -9,6 +9,7 @@ import (
 	"github.com/AliKefall/Somnambulist/internal/auth"
 	"github.com/AliKefall/Somnambulist/internal/database"
 	"github.com/AliKefall/Somnambulist/internal/endpoints"
+	"github.com/AliKefall/Somnambulist/internal/services/chat"
 	"github.com/AliKefall/Somnambulist/internal/services/observability"
 	"github.com/AliKefall/Somnambulist/internal/services/websocket"
 	"github.com/AliKefall/Somnambulist/internal/services/websocket/handlers"
@@ -29,15 +30,42 @@ func bootstrapServer(config *ServerConfig) (*sql.DB, serverDependencies) {
 	queries := database.New(conn)
 
 	metrics := observability.New()
-	hub := websocket.NewHub(queries, metrics)
+
 	redisClient := NewRedisClient(config.RedisURL)
+
+	// Services
+	chatService := chat.NewService(conn, queries)
+
+	// Websocket Hub
+	hub := websocket.NewHub(
+		queries,
+		metrics,
+		chatService,
+	)
+
+	// Websocket event handlers
 	wsHandler := &handlers.Config{
-		Hub: hub,
-		Queries: queries,
+		Hub:         hub,
+		Queries:     queries,
 		RedisClient: redisClient,
 	}
+
 	hub.SetEventHandler(wsHandler)
-	handler := endpoints.NewConfig(hub, conn, queries, auth.NewJWTManager(config.JWTSecret, 15*time.Minute), auth.NewPasswordHasher(), redisClient)
+
+	// HTTP handlers
+	handler := endpoints.NewConfig(
+		hub,
+		conn,
+		queries,
+		chatService,
+		auth.NewJWTManager(
+			config.JWTSecret,
+			15*time.Minute,
+		),
+		auth.NewPasswordHasher(),
+		redisClient,
+	)
+
 	return conn, serverDependencies{
 		config:  handler,
 		queries: queries,

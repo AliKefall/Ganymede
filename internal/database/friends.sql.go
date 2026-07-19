@@ -12,6 +12,30 @@ import (
 	"github.com/google/uuid"
 )
 
+const areFriends = `-- name: AreFriends :one
+SELECT EXISTS(
+    SELECT 1
+    FROM friendships
+    WHERE status = 'accepted'
+    AND(
+        (user_id = $1 AND friend_id = $2)
+        OR (user_id = $1 AND friend_id = $2)
+    )
+)
+`
+
+type AreFriendsParams struct {
+	UserID   uuid.UUID
+	FriendID uuid.UUID
+}
+
+func (q *Queries) AreFriends(ctx context.Context, arg AreFriendsParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, areFriends, arg.UserID, arg.FriendID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const createFriendRequest = `-- name: CreateFriendRequest :execrows
 INSERT INTO friend_requests (
     requester_id,

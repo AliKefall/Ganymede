@@ -5,6 +5,7 @@ import (
 
 	"github.com/AliKefall/Somnambulist/internal/auth"
 	"github.com/AliKefall/Somnambulist/internal/database"
+	"github.com/AliKefall/Somnambulist/internal/services/chat"
 	"github.com/AliKefall/Somnambulist/internal/services/matchmaking"
 	ratelimite "github.com/AliKefall/Somnambulist/internal/services/ratelimiter"
 	"github.com/AliKefall/Somnambulist/internal/services/websocket"
@@ -20,11 +21,12 @@ type Config struct {
 	Redis              *redis.Client
 	RateLimiter        ratelimite.RateLimiter
 	MatchmakingService matchmaking.Service
+	Chat               *chat.Service
 }
 
-func NewConfig(ws *websocket.Hub,dbconn *sql.DB, queries *database.Queries, jwt *auth.JWTManager, hasher *auth.PasswordHasher, redisClient *redis.Client) *Config {
+func NewConfig(ws *websocket.Hub, dbconn *sql.DB, queries *database.Queries,chatService *chat.Service ,jwt *auth.JWTManager, hasher *auth.PasswordHasher, redisClient *redis.Client) *Config {
 	return &Config{
-		WS: ws,
+		WS:      ws,
 		DB:      dbconn,
 		Queries: queries,
 		JWT:     jwt,

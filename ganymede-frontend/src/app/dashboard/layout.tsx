@@ -2,7 +2,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { Bootstrap } from "@/features/bootstrap/components/bootstrap";
-import { ChatPanel } from "@/features/friends/components/chat.panel";
+import { ChatPanel } from "@/features/chat/components/chat.panel";
 import { FriendsPanel } from "@/features/friends/components/friends.panel";
 import { FriendsPanelButton } from "@/features/friends/components/friends.panel.button";
 

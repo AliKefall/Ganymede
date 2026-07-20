@@ -1,5 +1,3 @@
-import { useChatStore } from "./chat-store";
-import { useMessagesStore } from "./message-store";
 import { useFriendsStore } from "./store";
 
 export const useFriendsList = () => useFriendsStore((state) => state.friends);
@@ -21,16 +19,3 @@ export const useIncomingRequestCount = () =>
 
 export const useOutgoingRequestCount = () =>
   useFriendsStore((state) => state.outgoingRequests.length);
-
-// Chat Messages
-
-export const useIsChatOpen = () =>
-    useChatStore((state) => state.isOpen);
-
-export const useSelectedFriend = () =>
-    useChatStore((state) => state.selectedFriend);
-
-export const useConversation = (friendID?: string) =>
-    useMessagesStore((state) =>
-        friendID ? (state.messages[friendID] ?? []) : [],
-    );

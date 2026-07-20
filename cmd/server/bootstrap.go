@@ -9,6 +9,7 @@ import (
 	"github.com/AliKefall/Somnambulist/internal/auth"
 	"github.com/AliKefall/Somnambulist/internal/database"
 	"github.com/AliKefall/Somnambulist/internal/endpoints"
+	"github.com/AliKefall/Somnambulist/internal/services"
 	"github.com/AliKefall/Somnambulist/internal/services/chat"
 	"github.com/AliKefall/Somnambulist/internal/services/observability"
 	"github.com/AliKefall/Somnambulist/internal/services/websocket"
@@ -37,11 +38,13 @@ func bootstrapServer(config *ServerConfig) (*sql.DB, serverDependencies) {
 	chatService := chat.NewService(conn, queries)
 
 	// Websocket Hub
-	hub := websocket.NewHub(
-		queries,
-		metrics,
-		chatService,
-	)
+	serviceContainer := &services.Container{
+		Queries: queries,
+		Metrics: metrics,
+		Chat:    chatService,
+	}
+
+	hub := websocket.NewHub(serviceContainer)
 
 	// Websocket event handlers
 	wsHandler := &handlers.Config{

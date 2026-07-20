@@ -9,8 +9,7 @@ import (
 	"time"
 
 	"github.com/AliKefall/Somnambulist/internal/database"
-	"github.com/AliKefall/Somnambulist/internal/services/chat"
-	"github.com/AliKefall/Somnambulist/internal/services/observability"
+	"github.com/AliKefall/Somnambulist/internal/services"
 	"github.com/google/uuid"
 )
 
@@ -75,13 +74,11 @@ type NewMessagePayload struct {
 
 // atomic alignment for 32 bit system. Active always must come first
 type Hub struct {
-	active  int64
-	mu      sync.RWMutex
-	clients map[*Client]bool
-	users   map[string]map[*Client]bool
-	queries *database.Queries
-	metrics *observability.Metrics
-	chat    *chat.Service
+	active   int64
+	mu       sync.RWMutex
+	clients  map[*Client]bool
+	users    map[string]map[*Client]bool
+	services *services.Container
 
 	Events EventHandler
 
@@ -90,13 +87,15 @@ type Hub struct {
 	inbound    chan inbound
 }
 
-func NewHub(queries *database.Queries, metrics *observability.Metrics, chatService *chat.Service) *Hub {
+func NewHub(container *services.Container) *Hub {
+	if container == nil {
+		container = &services.Container{}
+	}
+
 	return &Hub{
 		clients:    make(map[*Client]bool),
 		users:      make(map[string]map[*Client]bool),
-		queries:    queries,
-		metrics:    metrics,
-		chat:       chatService,
+		services:   container,
 		register:   make(chan *Client, 256),
 		unregister: make(chan *Client, 256),
 		inbound:    make(chan inbound, 1024),
@@ -186,7 +185,7 @@ func (h *Hub) handleSendMessage(sender *Client, msg Message) {
 
 	senderID := uuid.MustParse(sender.UserID)
 
-	dbMessage, err := h.chat.SendMessage(
+	dbMessage, err := h.services.Chat.SendMessage(
 		context.Background(),
 		senderID,
 		recipientID,
@@ -284,8 +283,8 @@ func (h *Hub) deliver(userID string, msg Message) error {
 		}
 	}
 
-	if h.metrics != nil {
-		h.metrics.ObserveWSMessage("out", msg.Type)
+	if h.services.Metrics != nil {
+		h.services.Metrics.ObserveWSMessage("out", msg.Type)
 	}
 	return nil
 }
@@ -298,6 +297,7 @@ func (h *Hub) ActiveConnection() int64 {
 
 func (h *Hub) registerClient(c *Client) {
 	h.mu.Lock()
+	wasOffline := len(h.users[c.UserID]) == 0
 
 	h.clients[c] = true
 	if h.users[c.UserID] == nil {
@@ -309,7 +309,7 @@ func (h *Hub) registerClient(c *Client) {
 
 	h.mu.Unlock()
 
-	if h.Events != nil {
+	if wasOffline && h.Events != nil {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -328,14 +328,17 @@ func (h *Hub) unregisterClient(c *Client) {
 	h.mu.Lock()
 
 	if _, ok := h.clients[c]; !ok {
+		h.mu.Unlock()
 		return
 	}
 	delete(h.clients, c)
 
+	isOffline := false
 	if conns := h.users[c.UserID]; conns != nil {
 		delete(conns, c)
 		if len(conns) == 0 {
 			delete(h.users, c.UserID)
+			isOffline = true
 		}
 	}
 
@@ -343,7 +346,7 @@ func (h *Hub) unregisterClient(c *Client) {
 
 	h.mu.Unlock()
 
-	if h.Events != nil {
+	if isOffline && h.Events != nil {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()

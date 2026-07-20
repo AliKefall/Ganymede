@@ -34,10 +34,12 @@ func (s *Service) SendMessage(
 		return database.Message{}, ErrMessageTooLong
 	}
 
+	a, b := normalizeFriendPair(senderID, recipientID)
 	areFriends, err := s.queries.AreFriends(ctx, database.AreFriendsParams{
-		UserID:   senderID,
-		FriendID: recipientID,
+		UserID:   a,
+		FriendID: b,
 	})
+
 	if err != nil {
 		return database.Message{}, err
 	}
@@ -61,6 +63,13 @@ func (s *Service) SendMessage(
 		senderID,
 		content,
 	)
+}
+
+func normalizeFriendPair(a, b uuid.UUID) (uuid.UUID, uuid.UUID) {
+	if a.String() < b.String() {
+		return a, b
+	}
+	return b, a
 }
 
 func (s *Service) createMessage(
@@ -127,14 +136,14 @@ func (s *Service) EditMessage(
 func (s *Service) DeleteMessage(
 	ctx context.Context,
 	messageID uuid.UUID,
-)error{
+) error {
 	return s.queries.DeleteMessage(ctx, messageID)
 }
 
 func (s *Service) GetLastMessage(
 	ctx context.Context,
 	conversationID uuid.UUID,
-)(database.Message, error){
+) (database.Message, error) {
 	return s.queries.GetLastMessage(
 		ctx,
 		conversationID,

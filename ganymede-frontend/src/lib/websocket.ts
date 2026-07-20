@@ -1,4 +1,6 @@
-type Listener = (message: unknown) => void;
+import type { WebSocketMessage } from "./dispatcher";
+
+type Listener = (message: WebSocketMessage) => void;
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
@@ -33,7 +35,7 @@ class WebSocketManager {
     this.socket.onmessage = (event) => {
       console.log("RAW WS:", event.data);
 
-      const message = JSON.parse(event.data);
+      const message = JSON.parse(event.data) as WebSocketMessage;
 
       console.log("PARSED WS:", message);
 
@@ -63,10 +65,12 @@ class WebSocketManager {
 
   subscribe(listener: Listener) {
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
-  private emit(message: unknown) {
+  private emit(message: WebSocketMessage) {
     for (const listener of this.listeners) listener(message);
   }
 

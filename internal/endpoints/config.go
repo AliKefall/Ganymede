@@ -24,13 +24,22 @@ type Config struct {
 	Chat               *chat.Service
 }
 
-func NewConfig(ws *websocket.Hub, dbconn *sql.DB, queries *database.Queries,chatService *chat.Service ,jwt *auth.JWTManager, hasher *auth.PasswordHasher, redisClient *redis.Client) *Config {
-	return &Config{
-		WS:      ws,
-		DB:      dbconn,
-		Queries: queries,
-		JWT:     jwt,
-		Hasher:  hasher,
-		Redis:   redisClient,
-	}
+func NewConfig(
+    ws *websocket.Hub,
+    dbconn *sql.DB,
+    queries *database.Queries,
+    chatService *chat.Service,
+    jwt *auth.JWTManager,
+    hasher *auth.PasswordHasher,
+    redisClient *redis.Client,
+) *Config {
+    return &Config{
+        WS:      ws,
+        DB:      dbconn,
+        Queries: queries,
+        JWT:     jwt,
+        Hasher:  hasher,
+        Redis:   redisClient,
+        Chat:    chatService,
+    }
 }

@@ -54,6 +54,7 @@ func normalizeFriendPair(a, b uuid.UUID) (uuid.UUID, uuid.UUID) {
 	}
 	return b, a
 }
+
 func mapIncomingRequests(
 	users []database.ListIncomingFriendRequestsByUserIDRow,
 ) []FriendRequestResponse {
@@ -382,8 +383,8 @@ func (cfg *Config) HandleAcceptFriendRequest(w http.ResponseWriter, r *http.Requ
 	rows, err := qtx.CreateFriendship(
 		r.Context(),
 		database.CreateFriendshipParams{
-			UserID:   a,
-			FriendID: b,
+			UserID:    a,
+			FriendID:  b,
 			CreatedAt: time.Now().UTC(),
 		},
 	)

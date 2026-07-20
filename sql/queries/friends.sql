@@ -104,13 +104,9 @@ ORDER BY u.username;
 
 
 -- name: AreFriends :one
-SELECT EXISTS(
+SELECT EXISTS (
     SELECT 1
     FROM friendships
-    WHERE status = 'accepted'
-    AND(
-        (user_id = $1 AND friend_id = $2)
-        OR (user_id = $1 AND friend_id = $2)
-    )
+    WHERE user_id = $1
+      AND friend_id = $2
 );
-

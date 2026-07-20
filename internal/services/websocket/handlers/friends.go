@@ -30,7 +30,6 @@ type FriendPresencePayload struct {
 	Online   bool   `json:"online"`
 }
 
-
 func (cfg *Config) NotifyFriendAccepted(ctx context.Context, accepter database.User, requester database.User) error {
 	return cfg.Hub.SendToUser(
 		requester.ID.String(),
@@ -74,18 +73,13 @@ func (cfg *Config) OnUserConnected(ctx context.Context, user database.User) erro
 	}
 
 	for _, friend := range friends {
-		err = cfg.Hub.SendToUser(
+		if err := cfg.Hub.SendToUser(
 			friend.ID.String(),
 			TypeFriendOnline,
 			payload,
-		)
-		if err := cfg.Hub.SendToUser(
-			friend.ID.String(),
-			TypeFriendOffline,
-			payload,
 		); err != nil {
 			log.Printf(
-				"Could not send offline event to %s: %v",
+				"Could not send online event to %s: %v",
 				friend.Username,
 				err,
 			)

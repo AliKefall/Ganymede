@@ -10,6 +10,7 @@ import { FriendRequests } from "./friend.requests";
 import { useFriendsPanelStore } from "../store/panel-store";
 import { useFriendsList, useIncomingRequests } from "../store/selectors";
 import { AddFriendDialog } from "./add.friend.dialog";
+import { chatActions } from "@/features/chat/store/actions";
 
 export function FriendsPanel() {
   const isOpen = useFriendsPanelStore((state) => state.isOpen);
@@ -85,7 +86,11 @@ export function FriendsPanel() {
                 </h3>
 
                 {onlineFriends.map((friend) => (
-                  <FriendCard key={friend.id} friend={friend} />
+                  <FriendCard
+                    key={friend.id}
+                    friend={friend}
+                    onClick={chatActions.open}
+                  />
                 ))}
               </section>
             )}
@@ -97,7 +102,11 @@ export function FriendsPanel() {
                 </h3>
 
                 {offlineFriends.map((friend) => (
-                  <FriendCard key={friend.id} friend={friend} />
+                  <FriendCard
+                    key={friend.id}
+                    friend={friend}
+                    onClick={chatActions.open}
+                  />
                 ))}
               </section>
             )}

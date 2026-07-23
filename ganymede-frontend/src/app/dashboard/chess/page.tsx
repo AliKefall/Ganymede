@@ -1,3 +1,6 @@
-export default function ChessPage() {
+"use client";
+
+
+export default function Page() {
   return null;
 }

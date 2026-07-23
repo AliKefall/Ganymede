@@ -23,7 +23,7 @@ import { useAuthStore } from "@/features/auth/auth-store";
 
 const navItems = [
   {
-    href: "/matchmaking",
+    href: "/dashboard/chess",
     label: "Chess",
     icon: Swords,
   },

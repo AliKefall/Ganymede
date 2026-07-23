@@ -18,11 +18,11 @@ export function MessageBubble({ message }: Props) {
   return (
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[75%] rounded-2xl px-4 py-2 ${
+        className={`max-w-[75%] rounded-2xl px-5 py-2 ${
           mine ? "bg-primary text-primary-foreground" : "bg-muted"
         }`}
       >
-        <p className="break-words text-sm">{message.content}</p>
+        <p className="wrap-break-word text-shadow-md">{message.content}</p>
         <p
           className={`mt-1 text-right text-[10px] ${
             mine ? "text-primary-foreground/70" : "text-muted-foreground"
